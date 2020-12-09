@@ -1,0 +1,3 @@
+LightFade:
+  module: light_fade
+  class: LightFade
