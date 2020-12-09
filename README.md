@@ -61,3 +61,6 @@ data = {
 This uses LightFade and Sonos to enable gentle alarms. At a certain time, fade the light on and fade the Sonos on. Then after some amount of time, turn both off. 
 
 See [gentlewakup.yaml.sample](./gentlewakeup.yaml.sample) for complete configuration.
+
+This depends on SonosApp, LightFade, and AdPlus. (See above.)
+
