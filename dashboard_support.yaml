@@ -1,0 +1,12 @@
+DashboardSupport:
+  module: dashboard_support
+  class: DashboardSupport
+  disable: false
+  test_mode: false
+
+  climate:
+    entities:
+      - climate.cabin
+      - climate.master_bath
+      - climate.gym
+      - climate.tv_room
