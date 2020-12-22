@@ -1,5 +1,6 @@
+import json  # noqa
+
 import adplus
-import json # noqa
 
 adplus.importlib.reload(adplus)
 
@@ -38,9 +39,8 @@ class DashboardSupport(adplus.Hass):
         self.log("Initialize")
         self.argsn = adplus.normalized_args(self, self.SCHEMA, self.args, debug=False)
         self.test_mode = self.argsn.get("test_mode")
-        self.log(f'config: {json.dumps(self.argsn,indent=4)}')
+        self.log(f"config: {json.dumps(self.argsn,indent=4)}")
         self.run_in(self.run_climate, 0)
-
 
     def run_climate(self, *args, **kwargs):
         entities = self.argsn["climate"]["entities"]
@@ -51,7 +51,7 @@ class DashboardSupport(adplus.Hass):
         # Guard against programming / config errors
         if set(entities) != set(configed_entities):
             self.warn(
-                f'climate_dashboard is not displaying all entities. autoclimate_entities: {entities} -- climate_dashboard_entities: {configed_entities}'
+                f"climate_dashboard is not displaying all entities. autoclimate_entities: {entities} -- climate_dashboard_entities: {configed_entities}"
             )
 
         if home_mode not in ["Home", "Away"]:
@@ -99,4 +99,4 @@ class DashboardSupport(adplus.Hass):
             state_dict[entity] = color
 
         # Publish state_dict.
-        self.log(f'run_climate: state_dict: {json.dumps(state_dict, indent=4)}')
+        self.log(f"run_climate: state_dict: {json.dumps(state_dict, indent=4)}")
