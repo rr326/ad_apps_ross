@@ -4,9 +4,12 @@ DashboardSupport:
   disable: false
   test_mode: false
 
+  appname: dashboard_colors
+  home_state_entity: input_select.home_state
+
   climate:
     entities:
       - climate.cabin
-      - climate.master_bath
+      - climate.master_bath_floor_heater
       - climate.gym
       - climate.tv_room
