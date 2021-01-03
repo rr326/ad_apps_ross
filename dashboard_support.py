@@ -46,7 +46,7 @@ class DashboardSupport(adplus.Hass):
         entities = self.argsn["climate"]["entities"]
         home_mode = "Home"  # GET HOME MODE
 
-        configed_entities = ["climate.cabin"]  # DEFINE ENTITIES I KNOW ABOUT
+        configed_entities = entities  # DEFINE ENTITIES I KNOW ABOUT
 
         # Guard against programming / config errors
         if set(entities) != set(configed_entities):
@@ -60,35 +60,35 @@ class DashboardSupport(adplus.Hass):
         # Business logic
         state_dict = {}
         color = None
-        for entity in configed_entities:
+        for climate in configed_entities:
             if home_mode == "Home":
-                if self.is_offline(entity):
+                if self.call_service("autoclimate/is_offline", climate=climate, namespace="autoclimate"):
                     color = "yellow"
-                elif self.is_on(entity):
-                    if entity in ["climate.gym", "climate.tv_room"]:
+                elif self.call_service("autoclimate/is_on", climate=climate, namespace="autoclimate"):
+                    if climate in ["climate.gym", "climate.tv_room"]:
                         color = "red"
                     else:
                         color = "green"
-                elif self.is_hardoff(entity):
-                    if entity == "climate.cabin":
+                elif self.call_service("autoclimate/is_hardoff", climate=climate, namespace="autoclimate"):
+                    if climate == "climate.cabin":
                         color = "red"
                     else:
                         color = "white"
                 else:
                     self.warn(
-                        f"Unexpected state for entity: {entity}. State: {self.state(entity)}"
+                        f"Unexpected state for climate: {climate}. State: {self.call_service('autoclimate/entity_state', climate=climate, namespace='autoclimate')}"
                     )
                     color = "purple"
             elif home_mode == "Away":
-                if self.is_offline(entity):
+                if self.is_offline(climate):
                     color = "yellow"
-                elif self.is_on(entity):
+                elif self.is_on(climate):
                     color = "red"
-                elif self.is_off(entity):
+                elif self.is_off(climate):
                     color = "white"
                 else:
                     self.warn(
-                        f"Unexpected state for entity: {entity}. State: {self.state(entity)}"
+                        f"Unexpected state for climate: {climate}. State: {self.state(climate)}"
                     )
                     color = "purple"
 
@@ -96,7 +96,7 @@ class DashboardSupport(adplus.Hass):
                 self.warn(f"Unexpected home_mode: {home_mode}")
                 color = "purple"
 
-            state_dict[entity] = color
+            state_dict[climate] = color
 
         # Publish state_dict.
         self.log(f"run_climate: state_dict: {json.dumps(state_dict, indent=4)}")
