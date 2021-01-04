@@ -22,6 +22,7 @@ class DashboardSupport(adplus.Hass):
         "test_mode": {"type": "boolean", "default": False, "required": False},
         "appname": {"required": False, "type": "string", "default": "dashboard_colors"},
         "home_state_entity": {"required": True, "type": "string"},
+        "app_state": {"required": True, "type": "string"},
         "climate": {
             "type": "dict",
             "required": True,
@@ -44,6 +45,7 @@ class DashboardSupport(adplus.Hass):
         self.test_mode = self.argsn.get("test_mode")
         self.appname = self.argsn["appname"]
         self.climates = self.argsn["climate"]["entities"]
+        self.app_state_entity = self.argsn["app_state"]
         self.configured_climates = [
             "climate.cabin",
             "climate.master_bath_floor_heater",
@@ -63,16 +65,12 @@ class DashboardSupport(adplus.Hass):
             )
 
         self.run_in(self.init_colors, 0)
-        self.run_in(self.init_listeners, 0)
+        self.listen_state(self.set_color_for_all, entity=self.app_state_entity, attribute="all")
 
     def init_colors(self, kwargs):
         self.set_color_for_all()
 
-    def init_listeners(self, kwargs):
-        for climate in self.climates:
-            self.listen_state(self.set_color_for, entity=climate, attribute="all")
-
-    def set_color_for_all(self):
+    def set_color_for_all(self, *args):
         for climate in self.climates:
             self.set_color_for(climate)
 
@@ -92,9 +90,6 @@ class DashboardSupport(adplus.Hass):
         check = lambda service: self.call_service(
             f"autoclimate/{service}", climate=climate, namespace="autoclimate"
         )
-
-        if climate == "climate.gym":
-            self.log("here")
 
         if home_mode == "Home":
             if check("is_offline"):
@@ -129,7 +124,7 @@ class DashboardSupport(adplus.Hass):
                 color = "purple"
 
         self.colors_dict[climate] = color
-        self.log(f"{climate:35} -- color: {color}")
+        # self.log(f"{climate:35} -- color: {color}")
         # Publish as flat state
         data = {climate: self.colors_dict[climate] for climate in self.climates}
         self.set_state(f"app.{self.appname}", state="colors", attributes=data)
