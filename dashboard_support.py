@@ -64,11 +64,16 @@ class DashboardSupport(adplus.Hass):
                 f"climate_dashboard is not displaying all entities. autoclimate_entities: {self.climates} -- climate_dashboard_entities: {self.configured_climates}"
             )
 
-        self.run_in(self.init_colors, 0)
-        self.listen_state(self.set_color_for_all, entity=self.app_state_entity, attribute="all")
+        self.run_in(
+            self.init_all, 5
+        )  # Give AutoClimate a chance to fully initialize. Prioirity & Dependencies aren't working.
 
-    def init_colors(self, kwargs):
+    def init_all(self, kwargs):
         self.set_color_for_all()
+        self.listen_state(
+            self.set_color_for_all, entity=self.app_state_entity, attribute="all"
+        )
+        self.log("Fully initialized")
 
     def set_color_for_all(self, *args):
         for climate in self.climates:
