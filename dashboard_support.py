@@ -48,7 +48,7 @@ class DashboardSupport(adplus.Hass):
         self.app_state_entity = self.argsn["app_state"]
         self.configured_climates = [
             "climate.cabin",
-            "climate.master_bath_floor_heater",
+            "climate.master_bath",
             "climate.gym",
             "climate.tv_room",
         ]
@@ -132,4 +132,32 @@ class DashboardSupport(adplus.Hass):
         # self.log(f"{climate:35} -- color: {color}")
         # Publish as flat state
         data = {climate: self.colors_dict[climate] for climate in self.climates}
+
+        #
+        # Now do overall state
+        #
+        overall = self.get_state("app.autoclimate_state")
+        overall_color = None
+        if overall == 'offline':
+            overall_color = 'yellow'
+        elif home_mode == "Home":
+            if overall == "on":
+                overall_color = "green"
+            elif overall == "off":
+                overall_color = "white"
+            else:
+                overall_color = "purple"
+        elif home_mode == "Away":
+            if overall == "on":
+                overall_color = "red"
+            elif overall == "off":
+                overall_color = "white"
+            else:
+                overall_color = "purple" 
+        else:
+            overall_color = "purple"
+
+        data["overall"] = overall_color
+        # self.log(f"{'overall':35} -- color: {overall_color}")
+
         self.set_state(f"app.{self.appname}", state="colors", attributes=data)
