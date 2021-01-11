@@ -3,9 +3,11 @@ DashboardSupport:
   class: DashboardSupport
   disable: false
   test_mode: false
+  debug: false
 
   appname: dashboard_colors
   home_state_entity: input_select.home_state
+  app_state: app.autoclimate_state
 
   climate:
     entities:
