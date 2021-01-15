@@ -102,7 +102,7 @@ class DashboardSupport(adplus.Hass):
             if climate in ["climate.gym", "climate.tv_room"]:
                 color = "red"
             else:
-                color = "green"
+                color = "pink"
         elif check("is_off"):
             color = "white"
         else:
@@ -127,7 +127,7 @@ class DashboardSupport(adplus.Hass):
         if overall == 'offline':
             overall_color = 'yellow'
         elif overall == "on":
-            overall_color = "green"
+            overall_color = "red"
         elif overall == "off":
             overall_color = "white"
         else:
