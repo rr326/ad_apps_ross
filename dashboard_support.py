@@ -98,13 +98,17 @@ class DashboardSupport(adplus.Hass):
             color = "yellow"
         elif check("is_hardoff") and climate == "climate.cabin":
             color = "orange"
+        elif check("is_off"):
+            color = "white"
         elif check("is_on"):
             if climate in ["climate.gym", "climate.tv_room"]:
                 color = "red"
             else:
                 color = "pink"
-        elif check("is_off"):
-            color = "white"
+        elif check("is_error_off"):
+            color = "Silver" # It's not cabin, so I should know about it, but not a big deal
+        elif check("is_error"):
+            color="gold"
         else:
             self.warn(
                 f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
