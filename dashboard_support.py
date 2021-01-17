@@ -131,7 +131,7 @@ class DashboardSupport(adplus.Hass):
         if overall == 'offline':
             overall_color = 'yellow'
         elif overall == "on":
-            overall_color = "red"
+            overall_color = "pink"
         elif overall == "off":
             overall_color = "white"
         else:
