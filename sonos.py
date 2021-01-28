@@ -47,12 +47,12 @@ class Sonos(adplus.Hass):
 
     def describe_sonos_system(self, kwargs):
         devices = list(soco.discover())
-        dev1 = devices[0]
-        favorites = dev1.get_sonos_favorites()
+        favorites = list(soco.music_library.MusicLibrary().get_sonos_favorites())
         devices_simple = {}
 
         def clip(line):
             MAX_LENGTH = 75
+            line = str(line)
             if len(line) < MAX_LENGTH:
                 return line
             else:
@@ -75,7 +75,7 @@ class Sonos(adplus.Hass):
             }
         data = {
             "devices": devices_simple,
-            "favorites": [clipdict(favorite) for favorite in favorites["favorites"]],
+            "favorites": [clipdict(favorite.to_dict()) for favorite in favorites],
         }
 
         logfile = Path(self.config_dir) / "../logs/sonos_data.json"
