@@ -221,6 +221,7 @@ class GentleWakeup(adplus.Hass):
             # Fader takes a single entity id
             data = config["lights"].copy()
             data["entity_id"] = entity_id
+            self.ll_success(f'GentleWakeup - fade on {entity_id}')
             if not self.test_mode:
                 self.fire_event("light_fade.begin", **data)
             else:
@@ -240,6 +241,7 @@ class GentleWakeup(adplus.Hass):
             data["player_name"] = player_name
             data["ramp_to_volume"] = "ALARM_RAMP_TYPE"
             data["uri"] = data["favorite"]["uri"]
+            self.ll_success(f'GentleWakeup - Sonos {player_name}')
             if not self.test_mode:
                 self.fire_event("sonos_app.play_favorite", **data)
             else:
@@ -258,12 +260,13 @@ class GentleWakeup(adplus.Hass):
 
     def cb_gw_off(self, kwargs):
         self.lb_log(f"Turning off")
-        self.set_state(self.app_entity, state="off")
+        self.set_state(self.app_entity, state="off")        
 
         config = kwargs["config"]
 
         # Lights
         for entity_id in config["lights"]["entity_id"]:
+            self.ll_success(f'GentleWakeup - turning off {entity_id}')
             if not config.get("test_mode"):
                 self.turn_off(entity_id)
             else:
@@ -271,6 +274,7 @@ class GentleWakeup(adplus.Hass):
 
         # Sonos
         for player_name in config["sonos"]["player_name"]:
+            self.ll_success(f'GentleWakeup - turning off {player_name}')
             if not config.get("test_mode"):
                 self.fire_event("sonos_app.stop", player_name=player_name)
             else:
