@@ -73,6 +73,7 @@ class DashboardSupport(adplus.Hass):
         self.listen_state(
             self.set_color_for_all, entity=self.app_state_entity, attribute="all"
         )
+        self.listen_state(self.set_color_for_all, entity=self.home_state_entity)
         self.log("Fully initialized")
 
     def set_color_for_all(self, *args):
