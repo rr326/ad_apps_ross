@@ -89,9 +89,7 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = None
-        check = lambda service: self.call_service(
-            f"autoclimate/{service}", climate=climate, namespace="autoclimate"
-        )
+        check = lambda service: self.call_service(f"autoclimate/{service}", climate=climate)
 
         # Do not use "home_mode" in Seattle since that is SEATTLE's mode!
         if check("is_offline"):
