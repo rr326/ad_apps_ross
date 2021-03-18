@@ -83,7 +83,12 @@ class Sonos(adplus.Hass):
             json.dump(data, fp, indent=4)
 
     def get_device_by_name(self, player_name, raise_on_notfound=False):
-        devices = list(soco.discover())
+        try:
+            devices = list(soco.discover())
+        except TypeError as err:
+            self.error(f'soco.discover returned None for player: {player_name} err: {err}')
+            return None
+
         for device in devices:
             if device.player_name == player_name.strip():
                 return device
