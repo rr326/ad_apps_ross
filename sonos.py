@@ -86,7 +86,9 @@ class Sonos(adplus.Hass):
         try:
             devices = list(soco.discover())
         except TypeError as err:
-            self.error(f'soco.discover returned None for player: {player_name} err: {err}')
+            self.error(
+                f"soco.discover returned None for player: {player_name} err: {err}"
+            )
             return None
 
         for device in devices:

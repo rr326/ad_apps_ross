@@ -89,7 +89,9 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = None
-        check = lambda service: self.call_service(f"autoclimate/{service}", climate=climate)
+        check = lambda service: self.call_service(
+            f"autoclimate/{service}", climate=climate
+        )
 
         # Do not use "home_mode" in Seattle since that is SEATTLE's mode!
         if check("is_offline"):
@@ -104,15 +106,14 @@ class DashboardSupport(adplus.Hass):
             else:
                 color = "pink"
         elif check("is_error_off"):
-            color = "Silver" # It's not cabin, so I should know about it, but not a big deal
+            color = "Silver"  # It's not cabin, so I should know about it, but not a big deal
         elif check("is_error"):
-            color="gold"
+            color = "gold"
         else:
             self.warn(
                 f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
             )
             color = "purple"
-
 
         self.colors_dict[climate] = color
         if self.debug_mode:
@@ -126,8 +127,8 @@ class DashboardSupport(adplus.Hass):
         #
         overall = self.get_state("app.autoclimate_state")
         overall_color = None
-        if overall == 'offline':
-            overall_color = 'yellow'
+        if overall == "offline":
+            overall_color = "yellow"
         elif overall == "on":
             overall_color = "pink"
         elif overall == "off":
