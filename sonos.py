@@ -99,14 +99,14 @@ class Sonos(adplus.Hass):
         return None
 
     def cb_event_play_favorite(self, event_name, data, kwargs):
-        self.log(f"PlayFavorite: data: {data}, kwargs: {kwargs}")
+        self.log(f"PlayFavorite: {data['player_name']}'")
 
         device = self.get_device_by_name(data["player_name"], raise_on_notfound=True)
         device.ramp_to_volume(data["volume"], ramp_type=data["ramp_to_volume"])
         device.play_uri(uri=data["uri"], start=True)
 
     def cb_event_stop(self, event_name, data, kwargs):
-        self.log(f"Stop: data: {data}, kwargs: {kwargs}")
+        self.log(f"Stop: {data['player_name']}")
 
         device = self.get_device_by_name(data["player_name"], raise_on_notfound=True)
         device.stop()

@@ -54,7 +54,7 @@ class LightFade(adplus.Hass):
     def cb_fade_begin(self, event_name, data, kwargs):
         MIN_BRIGHTNESS = 26  # My leviton has a minimum value of 26. (or 0)
 
-        self.log(f"Beginning: event_name: data: {data} -- kwargs: {kwargs}")
+        self.log(f'Begin LightFade: {data["entity_id"]}')
 
         args = adplus.normalized_args(self, KWARGS_SCHEMA, data, debug=False)
 
@@ -168,7 +168,6 @@ class LightFade(adplus.Hass):
             return
 
         if (last_step - 1) * step_size > abs(bright_end - bright_start):
-            self.error(f"Seems to be in a infinite loop. exiting.")
             return
 
         new_brightness = current_brightness_val + step_size * (1 if increase else -1)
