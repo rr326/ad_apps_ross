@@ -94,7 +94,7 @@ class DashboardSupport(adplus.Hass):
         # Business logic
         color = None
         check = lambda service: self.call_service(
-            f"autoclimate/{service}", climate=climate, namespace="autoclimate"
+            f"autoclimate/{service}", climate=climate
         )
 
         if home_mode == "Home":
