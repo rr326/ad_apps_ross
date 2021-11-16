@@ -79,13 +79,18 @@ class LightFade(adplus.Hass):
             STEP_SHORTEST_DURATION = (
                 5  # It takes some time for the entity to respond to a changed state.
             )
-            STEP_SIZE_MIN = round(0.01 * 255)  # 1% min step size
+            STEP_SIZE_MIN = 3  # round(0.01 * 255)  # 1% min step size
             num_steps = ceil(duration / STEP_SHORTEST_DURATION)
 
             total = abs(bright_end - bright_start)
             step_duration = STEP_SHORTEST_DURATION
 
             step_size = max(ceil(total / (duration / step_duration)), STEP_SIZE_MIN)
+
+            # Now recalculate step duration
+            step_duration = max(
+                STEP_SHORTEST_DURATION, ceil(duration / (total / step_size))
+            )
 
             self.debug(
                 f"LightFade: step_duration: {step_duration} -- step_size: {step_size} -- num_steps: {num_steps} -- total increase: {num_steps * step_size} -- bright_start: {bright_start} -- bright_end: {bright_end} -- duration: {duration}",
@@ -194,3 +199,17 @@ class LightFade(adplus.Hass):
             bright_target=new_brightness,
             bright_previous=current_brightness_val,
         )
+
+
+class TestLightFade(adplus.Hass):
+    """
+    Testing
+    """
+
+    def initialize(self):
+        self.log(f"Initialize")
+        self.run_in(self.call_fire, 1)
+
+    def call_fire(self, kwargs):
+        self.log(f"Firing event light_fade.being with args: {self.args}")
+        self.fire_event("light_fade.begin", **self.args)
