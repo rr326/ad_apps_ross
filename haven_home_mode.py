@@ -178,14 +178,15 @@ class HavenHomeModeSync(mqtt.Mqtt):
     SEATTLE_MODE_ENTITY = "input_select.pihaven_home_state"  # Mirror
     SCHEMA = {
         "my_hostname": {
-          "required": True,
-          "type": "string"  
+            "required": True,
+            "type": "string",
+            "regex": "^[^-]+$",  # No dashes permitted
         },
         "state_for_entities": {
             "required": False,
             "type": "list",
             "schema": {"type": "string"},
-        }
+        },
     }
 
     def initialize(self):
@@ -193,7 +194,7 @@ class HavenHomeModeSync(mqtt.Mqtt):
         self.argsn = adplus.normalized_args(self, self.SCHEMA, self.args, debug=False)
         self.state_entities = self.argsn.get("state_for_entities")
         self._state_listeners = set()
-        self.my_hostname = self.argsn.get('my_hostname', "HOSTNAME_NOT_SET")
+        self.my_hostname = self.argsn.get("my_hostname", "HOSTNAME_NOT_SET")
 
         self.dispatcher = EventListenerDispatcher(self.get_ad_api())
 
@@ -203,11 +204,18 @@ class HavenHomeModeSync(mqtt.Mqtt):
         )  # Be safe, though this will hurt other apps. Figure out.
         self.mqtt_subscribe(f"{MQTT_BASE_TOPIC}/#", namespace="mqtt")
 
-        # Register event dispatch listeners
+        # Register event dispatch listeners - processing INCOMING messages
         self.dispatcher.add_listener("print all", EventPattern(), None)
         self.dispatcher.add_listener(
             "ping/pong", EventPattern(pattern_event_type="ping"), self.ping_callback
         )
+        self.dispatcher.add_listener(
+            "inbound state",
+            EventPattern(pattern_event_type="state"),
+            self.inbound_state_callback,
+        )
+
+        # Register OUTGOING messages
         self.run_in(self.register_state_entities, 0)
 
         # Listen to all MQ events
@@ -222,15 +230,17 @@ class HavenHomeModeSync(mqtt.Mqtt):
         self.log(f"mq_listener: {event}, {data}")
         self.dispatcher.dispatch(data.get("topic"), data.get("payload"))
 
-    def ping_callback(
-        self, host_str, event_str, entity_str, payload, payload_asobj=None
-    ):
-        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host_str}/pong - {payload}")
+    def ping_callback(self, host, event, entity, payload, payload_asobj=None):
+        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload}")
         self.mqtt_publish(
-            topic=f"{MQTT_BASE_TOPIC}/{host_str}/pong",
+            topic=f"{MQTT_BASE_TOPIC}/{host}/pong",
             payload=payload,
             namespace="mqtt",
         )
+
+    def inbound_state_callback(self, host, event, entity, payload, payload_asobj=None):
+        self.log(f"inbound_state_callback(): /{host}/{event}/{entity} -- {payload}")
+        self.set_state(f"{entity}_{host}", state=payload, namespace="default")
 
     def register_state_entities(self, kwargs):
         def state_callback(entity, attribute, old, new, kwargs):
@@ -245,8 +255,6 @@ class HavenHomeModeSync(mqtt.Mqtt):
             cur_state = self.get_state(entity)
             self.log(f"** registered {entity} -- {cur_state}")
             self._state_listeners.add(self.listen_state(state_callback, entity))
-
-        pass
 
 
 class HavenHomeMode(adplus.Hass):
