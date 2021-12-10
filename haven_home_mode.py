@@ -180,7 +180,8 @@ class HavenHomeModeSync(mqtt.Mqtt):
 
         
         # Register event dispatch listeners
-        self.dispatcher.add_listener("print all", EventPattern(),None)
+        self.dispatcher.add_listener("print all", EventPattern(), None)
+        self.dispatcher.add_listener("ping/pong", EventPattern(pattern_event_type="ping"), self.ping_callback)
         
         # Listen to all MQ events
         self.listen_event(
@@ -193,6 +194,10 @@ class HavenHomeModeSync(mqtt.Mqtt):
     def mq_listener(self, event, data, kwargs):
         self.log(f"mq_listener: {event}, {data}")
         self.dispatcher.dispatch(data.get('topic'), data.get('payload'))
+        
+    def ping_callback(self, host_str, event_str, entity_str, payload, payload_asobj=None):
+        self.log(f'PING/PONG - {MQTT_BASE_TOPIC}/{host_str}/pong - {payload}')
+        self.mqtt_publish(topic=f"{MQTT_BASE_TOPIC}/{host_str}/pong", payload=payload, namespace="mqtt")
 
 
 class HavenHomeMode(adplus.Hass):
