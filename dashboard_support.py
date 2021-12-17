@@ -97,7 +97,7 @@ class DashboardSupport(adplus.Hass):
             f"autoclimate/{service}", climate=climate
         )
 
-        if home_mode == "Home":
+        if home_mode in ["Home", "Arriving"] :
             if check("is_offline"):
                 color = "yellow"
             elif check("is_hardoff") and climate == "climate.cabin":
@@ -114,7 +114,7 @@ class DashboardSupport(adplus.Hass):
                     f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
                 )
                 color = "purple"
-        elif home_mode == "Away":
+        elif home_mode in ["Away", "Leaving"]:
             if check("is_offline"):
                 color = "yellow"
             elif check("is_hardoff") and climate == "climate.cabin":
@@ -141,14 +141,14 @@ class DashboardSupport(adplus.Hass):
         overall_color = None
         if overall == 'offline':
             overall_color = 'yellow'
-        elif home_mode == "Home":
+        elif home_mode in ["Home", "Arriving"]:
             if overall == "on":
                 overall_color = "green"
             elif overall == "off":
                 overall_color = "white"
             else:
                 overall_color = "purple"
-        elif home_mode == "Away":
+        elif home_mode in ["Away", "Leaving"]:
             if overall == "on":
                 overall_color = "red"
             elif overall == "off":
