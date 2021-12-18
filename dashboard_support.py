@@ -88,7 +88,7 @@ class DashboardSupport(adplus.Hass):
         """
 
         home_mode = self.get_state(self.home_state_entity)
-        if home_mode not in ["Home", "Away"]:
+        if home_mode not in ["Home", "Away", "Arriving", "Leaving"]:
             self.warn(f"Unexpected home_mode: {home_mode}")
 
         # Business logic
