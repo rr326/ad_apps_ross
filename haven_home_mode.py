@@ -231,7 +231,9 @@ class HavenHomeModeSync(mqtt.Mqtt):
         self.dispatcher.dispatch(data.get("topic"), data.get("payload"))
 
     def ping_callback(self, host, event, entity, payload, payload_asobj=None):
-        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]")
+        self.log(
+            f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]"
+        )
         if host != self.my_hostname:
             self.mqtt_publish(
                 topic=f"{MQTT_BASE_TOPIC}/{self.my_hostname}/pong",
@@ -256,11 +258,6 @@ class HavenHomeModeSync(mqtt.Mqtt):
             cur_state = self.get_state(entity)
             self.log(f"** registered {entity} -- {cur_state}")
             self._state_listeners.add(self.listen_state(state_callback, entity))
-
-
-class HavenHomeMode(adplus.Hass):
-    def initialize(self):
-        self.log("Initialize")
 
 
 class TestHavenHomeMode(adplus.Hass):
