@@ -3,7 +3,7 @@ from appdaemon.adapi import ADAPI
 from appdaemon.plugins.mqtt import mqttapi as mqtt
 from dataclasses import dataclass
 import re
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple
 import json
 
 adplus.importlib.reload(adplus)
@@ -30,6 +30,7 @@ class EventParts:
 
     match_host, match_event_type, match_entity:
         None = match any value (like regex ".*")
+        !str = must NOT equal string (eg: pattern_host="!pihaven" means host != "pihaven")
         str = must equal string
         TODO (maybe) - more powerful matching
     """
@@ -67,17 +68,26 @@ class EventParts:
         self.entity = parts[3] if len(parts) >= 4 else None
         return True
 
+    def _match_pattern(self, value: Optional[str], pattern: Optional[str]) -> bool:
+        """
+        None --> True
+        !pattern != value --> True
+        pattern == value --> True
+        Otherwise False
+        """
+        if pattern is None:
+            return True
+        if pattern[0] == "!":
+            return pattern[1:] != value
+        else:
+            return pattern == value
+
     def _do_match(self):
-        if self._pattern_host and self.host != self._pattern_host:
-            return False
-
-        if self._pattern_event_type and self.event_type != self._pattern_event_type:
-            return False
-
-        if self._pattern_entity and self.entity != self._pattern_entity:
-            return False
-
-        return True
+        return (
+            self._match_pattern(self.host, self._pattern_host)
+            and self._match_pattern(self.event_type, self._pattern_event_type)
+            and self._match_pattern(self.entity, self._pattern_entity)
+        )
 
 
 @dataclass
@@ -207,11 +217,19 @@ class HavenHomeModeSync(mqtt.Mqtt):
         # Register event dispatch listeners - processing INCOMING messages
         self.dispatcher.add_listener("print all", EventPattern(), None)
         self.dispatcher.add_listener(
-            "ping/pong", EventPattern(pattern_event_type="ping"), self.ping_callback
+            "ping/pong",
+            EventPattern(
+                pattern_host=f"!{self.my_hostname}",  # Only listen to for events I didn't create
+                pattern_event_type="ping",
+            ),
+            self.ping_callback,
         )
         self.dispatcher.add_listener(
             "inbound state",
-            EventPattern(pattern_event_type="state"),
+            EventPattern(
+                pattern_host=f"!{self.my_hostname}",  # Only listen to for events I didn't create
+                pattern_event_type="state",
+            ),
             self.inbound_state_callback,
         )
 
@@ -226,21 +244,54 @@ class HavenHomeModeSync(mqtt.Mqtt):
             namespace="mqtt",
         )
 
+    def entity_add_my_hostname(self, entity: str) -> str:
+        """
+        light.named_light -> light.named_light_#my_hostname#
+
+        opposite: entity_split_hostname()
+        """
+        return f"{entity}_#{self.my_hostname}"
+
+    def entity_split_hostname(self, entity: str) -> Tuple[str, Optional[str]]:
+        """
+        light.named_light#pihaven# -> ("light.named_light", "pihaven")
+        light.local_light -> ("light.local_light", None)
+
+        opposite: entity_add_myhostname()
+        """
+        match = re.fullmatch(r"(.*)_#([^#]+)#", entity)
+        if match:
+            return (match.group(1), match.group(2))
+        else:
+            return (entity, None)
+
     def mq_listener(self, event, data, kwargs):
         self.log(f"mq_listener: {event}, {data}")
         self.dispatcher.dispatch(data.get("topic"), data.get("payload"))
 
     def ping_callback(self, host, event, entity, payload, payload_asobj=None):
-        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload}")
+        self.log(
+            f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]"
+        )
         self.mqtt_publish(
-            topic=f"{MQTT_BASE_TOPIC}/{host}/pong",
+            topic=f"{MQTT_BASE_TOPIC}/{self.my_hostname}/pong",
             payload=payload,
             namespace="mqtt",
         )
 
     def inbound_state_callback(self, host, event, entity, payload, payload_asobj=None):
-        self.log(f"inbound_state_callback(): /{host}/{event}/{entity} -- {payload}")
-        self.set_state(f"{entity}_{host}", state=payload, namespace="default")
+        (entity, entity_host) = self.entity_split_hostname(entity)
+        if entity_host != self.my_hostname:
+            self.log(
+                f"inbound_state_callback(): set_state: /{host}/{event}/{entity} -- {payload}"
+            )
+            self.set_state(f"{entity}_{host}", state=payload, namespace="default")
+        else:
+            # Should not be here - programming error
+            self.log(
+                f"inbound_state_callback(): Ignoring /{host}/{event}/{entity} -- {payload}",
+                level="WARNING",
+            )
 
     def register_state_entities(self, kwargs):
         def state_callback(entity, attribute, old, new, kwargs):
@@ -255,11 +306,6 @@ class HavenHomeModeSync(mqtt.Mqtt):
             cur_state = self.get_state(entity)
             self.log(f"** registered {entity} -- {cur_state}")
             self._state_listeners.add(self.listen_state(state_callback, entity))
-
-
-class HavenHomeMode(adplus.Hass):
-    def initialize(self):
-        self.log("Initialize")
 
 
 class TestHavenHomeMode(adplus.Hass):
@@ -318,6 +364,30 @@ class TestHavenHomeMode(adplus.Hass):
         assert (
             EventParts(adapi, topic, EventPattern(pattern_entity="myentity")).matches
             is False
+        )
+
+        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/entity"
+        assert (
+            EventParts(adapi, topic, EventPattern(pattern_host="pi-haven")).matches
+            is True
+        )
+
+        topic = f"{MQTT_BASE_TOPIC}/pi-seattle/state/entity"
+        assert (
+            EventParts(adapi, topic, EventPattern(pattern_host="pi-haven")).matches
+            is False
+        )
+
+        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/entity"
+        assert (
+            EventParts(adapi, topic, EventPattern(pattern_host="!pi-haven")).matches
+            is False
+        )
+
+        topic = f"{MQTT_BASE_TOPIC}/pi-seattle/state/entity"
+        assert (
+            EventParts(adapi, topic, EventPattern(pattern_host="!pi-haven")).matches
+            is True
         )
 
         topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
