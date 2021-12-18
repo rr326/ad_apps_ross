@@ -231,12 +231,13 @@ class HavenHomeModeSync(mqtt.Mqtt):
         self.dispatcher.dispatch(data.get("topic"), data.get("payload"))
 
     def ping_callback(self, host, event, entity, payload, payload_asobj=None):
-        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload}")
-        self.mqtt_publish(
-            topic=f"{MQTT_BASE_TOPIC}/{host}/pong",
-            payload=payload,
-            namespace="mqtt",
-        )
+        self.log(f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]")
+        if host != self.my_hostname:
+            self.mqtt_publish(
+                topic=f"{MQTT_BASE_TOPIC}/{self.my_hostname}/pong",
+                payload=payload,
+                namespace="mqtt",
+            )
 
     def inbound_state_callback(self, host, event, entity, payload, payload_asobj=None):
         self.log(f"inbound_state_callback(): /{host}/{event}/{entity} -- {payload}")
