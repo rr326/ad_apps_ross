@@ -197,9 +197,6 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
     It requires both HA installations to share state via MQTT (probably via a bridge)
     with a shared topic (eg: mqtt_shared)
 
-
-    TODO - Make this generic
-
     Devnotes
     * If you create a new entity with set_state(entity_id="something_new"),
     it will *create* the entity, but it will not function normally.
@@ -236,7 +233,6 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.argsn = adplus.normalized_args(self, self.SCHEMA, self.args, debug=False)
         self.state_entities = self.argsn.get("state_for_entities")
         self._state_listeners = set()
-        self._remote_entity_listeners = {}
         self.my_hostname = self.argsn.get("my_hostname", "HOSTNAME_NOT_SET")
         self.mqtt_base_topic = self.argsn.get(
             "mqtt_base_topic", self.MQTT_DEFAULT_BASE_TOPIC
@@ -274,6 +270,14 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         # Register OUTGOING messages
         self.run_in(self.register_state_entities, 0)
 
+        # Register sync_servic
+        self.run_in(self.register_sync_service, 0)
+
+        def test_sync_service(kwargs):
+            self.log('***test_sync_service()***')
+            self.call_service('sync_entities_via_mqtt/toggle_state', entity_id="light.office_piseattle", namespace="default")
+        self.run_in(test_sync_service, 1)
+
         # Listen to all MQ events
         self.listen_event(
             self.mq_listener,
@@ -282,22 +286,41 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
             namespace="mqtt",
         )
 
+    """
+    Entity naming / renaming.
+
+    # Constraints
+    * You need a remote entity to have a HOSTNAME suffix
+    * The suffix can only be alphanumeric characters. Symbols won't work.
+    * EXCEPT - you CAN have underscore (_) 
+        * BUT can't end with it
+        * You can not have two in a row
+    * You can only create *sensor* entities. (Actually, you can create
+      any entity, but they are read only. So sensors are more sensible.)
+
+    # Rules
+    host: seattle, entity: light.office -> sensor.light_office_seattle
+    """
+
     def entity_add_hostname(self, entity: str, host: str) -> str:
         """
-        light.named_light, host -> light.named_light_#host#
+        light.named_light, host -> light.named_light_host
 
         opposite: entity_split_hostname()
         """
-        return f"{entity}xxx{host}xxx"
+
+        # Note- you can't use any symbols for the host delimiter. I tried many.
+        # 500 error
+        return f"{entity}_{host}" 
 
     def entity_split_hostname(self, entity: str) -> Tuple[str, Optional[str]]:
         """
-        light.named_light#pihaven# -> ("light.named_light", "pihaven")
+        light.named_light_pihaven -> ("light.named_light", "pihaven")
         light.local_light -> ("light.local_light", None)
 
         opposite: entity_add_myhostname()
         """
-        match = re.fullmatch(r"(.*)xxx([^#]+)xxx", entity)
+        match = re.fullmatch(r"(.*)_([^#]+)", entity)
         if match:
             return (match.group(1), match.group(2))
         else:
@@ -335,40 +358,7 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.log(f"inbound_callback() set_state({remote_entity}, state={payload})")
         self.set_state(f"{remote_entity}", state=payload, namespace="default")
 
-        # Need to listen for changes to this entity, but only once.
-        # You need to do this every time the app reloads.
-        if remote_entity not in self._remote_entity_listeners:
-            # We created the entity. Watch for changes
-            def remote_entity_callback(entity, attribute, old, new, kwargs):
-                (remote_entity, remote_host) = self.entity_split_hostname(entity)
-                self.log(
-                    f"remote_entity_callback({entity}, {new}) --> {self.mqtt_base_topic}/{remote_entity}/state/{remote_host}"
-                )
-                self.mqtt_publish(
-                    topic=f"{self.mqtt_base_topic}/{remote_entity}/state/{remote_host}",
-                    payload=new,
-                    namespace="mqtt",
-                )
-
-            cancel_handle = self.listen_state(
-                remote_entity_callback, entity=remote_entity
-            )
-            self._remote_entity_listeners[remote_entity] = cancel_handle
-            self.log(f"Added remote_entity state listener for {remote_entity}")
-
-            # Unfortunately when you make a non-sensor entity with Appdaemon
-            # it doesn't behave properly. So to enable on/off functionality, you
-            # need to handle that yourself. Listen for events for the entity.
-            def capture_changes_callback(event_name, data, kwargs):
-                # This will get ALL call-service events. Be efficient!
-                # event_entity = data.get("")
-                self.log(
-                    f"capture_changes_callback() data:\nevent:{event_name}\n{json.dumps(data,indent=4)}"
-                )
-
-            self.listen_event(
-                capture_changes_callback, event="call_service", oneshot=True
-            )
+        
 
     def register_state_entities(self, kwargs):
         def state_callback(entity, attribute, old, new, kwargs):
@@ -383,6 +373,50 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
             cur_state = self.get_state(entity)
             self.log(f"** registered {entity} -- {cur_state}")
             self._state_listeners.add(self.listen_state(state_callback, entity))
+
+    def register_sync_service(self, kwargs):
+        """
+        Register a service for signaling to a remote entity that it should change the state of an object
+
+        call_service("default", "sync_entities_via_mqtt", "set_state", {"entity_id":"sensor.light_office_pihaven","value":"on"})
+        call_service("default", "sync_entities_via_mqtt", "toggle_state", {"entity_id":"sensor.light_office_pihaven"})
+
+        What it does:
+            mqtt_publish("mqtt_shared/pihaven/state", payload="on")
+        """
+        def sync_service_callback(namespace: str, service: str, action:str, kwargs) -> None:
+            self.log(f'sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
+
+            if namespace !="default" or action not in ["set_state", "toggle_state"] or "entity_id" not in kwargs:
+                raise RuntimeError(f'Invalid parameters: sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
+
+            local_entity = kwargs["entity_id"]
+
+            (remote_entity, remote_host) = self.entity_split_hostname(local_entity)
+            if remote_host is None:
+                raise RuntimeError(f'Programming error - invalid remote_entity_id: {local_entity}')
+
+            if action == "set_state":
+                value = kwargs["value"]
+            elif action == "toggle_state":
+                if not self.entity_exists(local_entity):
+                    raise RuntimeError(f'entity does not exist: {local_entity}')
+                cur_state = self.get_state(entity_id = local_entity)
+                if cur_state == "on":
+                    value = "off"
+                elif cur_state == "off":
+                    value = "on"
+                else:
+                    raise RuntimeError(f'Unexpected state value for {local_entity}: {cur_state}')
+            else:
+                raise RuntimeError(f'Invalid action: |{action}|, type: {type(action)}')
+
+            self.mqtt_publish(topic=f"{self.mqtt_base_topic}/{remote_host}/state/{remote_entity}",
+                payload=value,
+                namespace="mqtt")
+        self.register_service("sync_entities_via_mqtt/change_state", sync_service_callback)
+        self.register_service("sync_entities_via_mqtt/toggle_state", sync_service_callback)
+        self.log('register_service: sync_entities_via_mqtt -- change_state, toggle_state')
 
 
 class TestSyncEntitiesViaMqtt(adplus.Hass):
