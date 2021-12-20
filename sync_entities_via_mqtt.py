@@ -1,7 +1,7 @@
 import json
 import re
 from dataclasses import dataclass
-from typing import Callable, Optional, Tuple
+from typing import Callable, Optional, Tuple, Any
 
 import adplus
 from appdaemon.adapi import ADAPI
@@ -14,7 +14,8 @@ adplus.importlib.reload(adplus)
 
 @dataclass
 class EventPattern:
-    pattern_host: Optional[str] = None
+    pattern_fromhost: Optional[str] = None
+    pattern_tohost: Optional[str] = None
     pattern_event_type: Optional[str] = None
     pattern_entity: Optional[str] = None
 
@@ -25,9 +26,12 @@ class EventParts:
     If does not match, it will NOT fail. Just reports self.matches == False
 
     event:
-        mqtt_shared/<source_hostname>/<event_type>/<entity>
-        mqtt_shared/pi-haven/state/light.outside_porch
-        mqtt_shared/pi-haven/ping
+        mqtt_shared/<fromhost>/<tohost>/<event_type>/<entity>
+        mqtt_shared/haven/seattle/state/light.outside_porch
+        mqtt_shared/haven/all/state/light.outside_porch
+        mqtt_shared/haven/*/state/light.outside_porch
+
+        mqtt_shared/haven/*/ping
 
     match_host, match_event_type, match_entity:
         None = match any value (like regex ".*")
@@ -46,12 +50,14 @@ class EventParts:
         self.adapi = adapi
         self.mqtt_base_topic = mqtt_base_topic
         self.event = event
-        self._pattern_host = pattern.pattern_host if pattern else None
+        self._pattern_fromhost = pattern.pattern_fromhost if pattern else None
+        self._pattern_tohost = pattern.pattern_tohost if pattern else None
         self._pattern_event_type = pattern.pattern_event_type if pattern else None
         self._pattern_entity = pattern.pattern_entity if pattern else None
 
         self.matches = False
-        self.host = None
+        self.fromhost = None
+        self.tohost = None
         self.event_type = None
         self.entity = None
 
@@ -61,7 +67,7 @@ class EventParts:
 
     def _do_split(self):
         parts = self.event.split("/")
-        if len(parts) < 3 or len(parts) > 4:
+        if len(parts) < 4 or len(parts) > 5:
             self.adapi.log(f"match failed - improper format: {self.event}")
             return False
 
@@ -71,19 +77,28 @@ class EventParts:
             )
             return False
 
-        self.host = parts[1]
-        self.event_type = parts[2]
-        self.entity = parts[3] if len(parts) >= 4 else None
+        self.fromhost = parts[1]
+        self.tohost = parts[2]
+        self.event_type = parts[3]
+        self.entity = parts[4] if len(parts) >= 5 else None
         return True
 
-    def _match_pattern(self, value: Optional[str], pattern: Optional[str]) -> bool:
+    def _match_pattern(
+        self, value: Optional[str], pattern: Optional[str], special_all: bool = False
+    ) -> bool:
         """
         None --> True
         !pattern != value --> True
         pattern == value --> True
         Otherwise False
+
+        if "special_all",
+        pattern=="all" --> True
+        pattern=="*" --> True
         """
         if pattern is None:
+            return True
+        if special_all and pattern in ["all", "*"]:
             return True
         if pattern[0] == "!":
             return pattern[1:] != value
@@ -92,17 +107,25 @@ class EventParts:
 
     def _do_match(self):
         return (
-            self._match_pattern(self.host, self._pattern_host)
+            self._match_pattern(self.fromhost, self._pattern_fromhost, special_all=True)
+            and self._match_pattern(self.tohost, self._pattern_tohost, special_all=True)
             and self._match_pattern(self.event_type, self._pattern_event_type)
             and self._match_pattern(self.entity, self._pattern_entity)
         )
+
+
+# Dispatcher Callback Signature
+# my_callback(fromhost, tohost, event_str, entity_str, payload, payload_asobj=None) -> Any
+DispatcherCallbackType = Callable[
+    [str, str, str, Optional[str], Optional[str], Optional[object]], Optional[Any]
+]
 
 
 @dataclass
 class EventListener:
     name: str
     pattern: EventPattern
-    callback: Callable
+    callback: Optional[DispatcherCallbackType]
 
 
 class EventListenerDispatcher:
@@ -112,7 +135,7 @@ class EventListenerDispatcher:
     Usage:
 
     dispatcher = EventListenerDispatcher(self.adapi)
-    def my_callback(host_str, event_str, entity_str, payload, payload_asobj=None): pass
+    def my_callback(fromhost, tohost, event_str, entity_str, payload, payload_asobj=None) -> Any: pass
 
     dispatcher.add_listener("listen for all state changes", EventPattern(event_type="state"), my_callback)
 
@@ -126,7 +149,9 @@ class EventListenerDispatcher:
 
         self._listeners = {}
 
-    def add_listener(self, name, pattern: EventPattern, callback):
+    def add_listener(
+        self, name, pattern: EventPattern, callback: Optional[DispatcherCallbackType]
+    ):
         if name in self._listeners:
             self.adapi.log(
                 f"add_listener - being asked to re-register following listener: {name}",
@@ -148,11 +173,11 @@ class EventListenerDispatcher:
         del self._listeners["name"]
 
     def default_callback(
-        self, host, event_type, entity, payload, payload_as_obj
+        self, fromhost, tohost, event_type, entity, payload, payload_as_obj
     ) -> list:
         return [
             self.adapi.log(
-                f"default_callback: {host}/{event_type}/{entity} -- {payload}"
+                f"default_callback: {fromhost}/{tohost}/{event_type}/{entity} -- {payload}"
             )
         ]
 
@@ -176,7 +201,8 @@ class EventListenerDispatcher:
                 self.adapi.log(f"dispatcher: dispatching to: {name}")
                 results.append(
                     listener.callback(
-                        ep.host,
+                        ep.fromhost,
+                        ep.tohost,
                         ep.event_type,
                         ep.entity,
                         payload,
@@ -253,7 +279,7 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.dispatcher.add_listener(
             "ping/pong",
             EventPattern(
-                pattern_host=f"!{self.my_hostname}",  # Only listen to for events I didn't create
+                pattern_fromhost=f"!{self.my_hostname}",  # Only listen to for events I didn't create
                 pattern_event_type="ping",
             ),
             self.ping_callback,
@@ -261,7 +287,7 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.dispatcher.add_listener(
             "inbound state",
             EventPattern(
-                pattern_host=f"!{self.my_hostname}",  # Only listen to for events I didn't create
+                pattern_fromhost=f"!{self.my_hostname}",  # Only listen to for events I didn't create
                 pattern_event_type="state",
             ),
             self.inbound_state_callback,
@@ -274,8 +300,13 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.run_in(self.register_sync_service, 0)
 
         def test_sync_service(kwargs):
-            self.log('***test_sync_service()***')
-            self.call_service('sync_entities_via_mqtt/toggle_state', entity_id="light.office_piseattle", namespace="default")
+            self.log("***test_sync_service()***")
+            self.call_service(
+                "sync_entities_via_mqtt/toggle_state",
+                entity_id="light.office_seattle",
+                namespace="default",
+            )
+
         self.run_in(test_sync_service, 1)
 
         # Listen to all MQ events
@@ -311,7 +342,7 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
 
         # Note- you can't use any symbols for the host delimiter. I tried many.
         # 500 error
-        return f"{entity}_{host}" 
+        return f"{entity}_{host}"
 
     def entity_split_hostname(self, entity: str) -> Tuple[str, Optional[str]]:
         """
@@ -330,35 +361,33 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.log(f"mq_listener: {event}, {data}")
         self.dispatcher.dispatch(data.get("topic"), data.get("payload"))
 
-    def ping_callback(self, host, event, entity, payload, payload_asobj=None):
+    def ping_callback(self, fromhost, tohost, event, entity, payload, payload_asobj=None):
         self.log(
-            f"PING/PONG - {self.mqtt_base_topic}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]"
+            f"PING/PONG - {self.mqtt_base_topic}/{fromhost}/{tohost}/pong - {payload} [my_hostname: {self.my_hostname}]"
         )
         self.mqtt_publish(
-            topic=f"{self.mqtt_base_topic}/{self.my_hostname}/pong",
+            topic=f"{self.mqtt_base_topic}/{self.my_hostname}/{fromhost}/pong",
             payload=payload,
             namespace="mqtt",
         )
 
-    def inbound_state_callback(self, host, event, entity, payload, payload_asobj=None):
+    def inbound_state_callback(self, fromhost, tohost, event, entity, payload, payload_asobj=None):
         (_, entity_host) = self.entity_split_hostname(entity)
         if entity_host is not None:
             # Should not be here - programming error
             self.log(
-                f"inbound_state_callback(): Ignoring /{host}/{event}/{entity} -- {payload}",
+                f"inbound_state_callback(): Ignoring /{fromhost}/{tohost}/{event}/{entity} -- {payload}",
                 level="ERROR",
             )
             return
 
         self.log(
-            f"inbound_state_callback(): set_state: /{host}/{event}/{entity} -- {payload}"
+            f"inbound_state_callback(): set_state: /{fromhost}/{tohost}/{event}/{entity} -- {payload}"
         )
 
-        remote_entity = self.entity_add_hostname(entity, host)
+        remote_entity = self.entity_add_hostname(entity, fromhost)
         self.log(f"inbound_callback() set_state({remote_entity}, state={payload})")
         self.set_state(f"{remote_entity}", state=payload, namespace="default")
-
-        
 
     def register_state_entities(self, kwargs):
         def state_callback(entity, attribute, old, new, kwargs):
@@ -384,39 +413,63 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         What it does:
             mqtt_publish("mqtt_shared/pihaven/state", payload="on")
         """
-        def sync_service_callback(namespace: str, service: str, action:str, kwargs) -> None:
-            self.log(f'sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
 
-            if namespace !="default" or action not in ["set_state", "toggle_state"] or "entity_id" not in kwargs:
-                raise RuntimeError(f'Invalid parameters: sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
+        def sync_service_callback(
+            namespace: str, service: str, action: str, kwargs
+        ) -> None:
+            self.log(
+                f"sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})"
+            )
+
+            if (
+                namespace != "default"
+                or action not in ["set_state", "toggle_state"]
+                or "entity_id" not in kwargs
+            ):
+                raise RuntimeError(
+                    f"Invalid parameters: sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})"
+                )
 
             local_entity = kwargs["entity_id"]
 
             (remote_entity, remote_host) = self.entity_split_hostname(local_entity)
             if remote_host is None:
-                raise RuntimeError(f'Programming error - invalid remote_entity_id: {local_entity}')
+                raise RuntimeError(
+                    f"Programming error - invalid remote_entity_id: {local_entity}"
+                )
 
             if action == "set_state":
                 value = kwargs["value"]
             elif action == "toggle_state":
                 if not self.entity_exists(local_entity):
-                    raise RuntimeError(f'entity does not exist: {local_entity}')
-                cur_state = self.get_state(entity_id = local_entity)
+                    raise RuntimeError(f"entity does not exist: {local_entity}")
+                cur_state = self.get_state(entity_id=local_entity)
                 if cur_state == "on":
                     value = "off"
                 elif cur_state == "off":
                     value = "on"
                 else:
-                    raise RuntimeError(f'Unexpected state value for {local_entity}: {cur_state}')
+                    raise RuntimeError(
+                        f"Unexpected state value for {local_entity}: {cur_state}"
+                    )
             else:
-                raise RuntimeError(f'Invalid action: |{action}|, type: {type(action)}')
+                raise RuntimeError(f"Invalid action: |{action}|, type: {type(action)}")
 
-            self.mqtt_publish(topic=f"{self.mqtt_base_topic}/{remote_host}/state/{remote_entity}",
+            self.mqtt_publish(
+                topic=f"{self.mqtt_base_topic}/{remote_host}/state/{remote_entity}",
                 payload=value,
-                namespace="mqtt")
-        self.register_service("sync_entities_via_mqtt/change_state", sync_service_callback)
-        self.register_service("sync_entities_via_mqtt/toggle_state", sync_service_callback)
-        self.log('register_service: sync_entities_via_mqtt -- change_state, toggle_state')
+                namespace="mqtt",
+            )
+
+        self.register_service(
+            "sync_entities_via_mqtt/change_state", sync_service_callback
+        )
+        self.register_service(
+            "sync_entities_via_mqtt/toggle_state", sync_service_callback
+        )
+        self.log(
+            "register_service: sync_entities_via_mqtt -- change_state, toggle_state"
+        )
 
 
 class TestSyncEntitiesViaMqtt(adplus.Hass):
