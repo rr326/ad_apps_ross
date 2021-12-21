@@ -1,14 +1,15 @@
+import json
+import re
+from dataclasses import dataclass
+from typing import Callable, Optional, Tuple
+
 import adplus
 from appdaemon.adapi import ADAPI
 from appdaemon.plugins.mqtt import mqttapi as mqtt
-from dataclasses import dataclass
-import re
-from typing import Callable, Optional, Tuple
-import json
 
 adplus.importlib.reload(adplus)
 
-MQTT_BASE_TOPIC = "mqtt_shared"
+# pylint: disable=unused-argument
 
 
 @dataclass
@@ -35,8 +36,15 @@ class EventParts:
         TODO (maybe) - more powerful matching
     """
 
-    def __init__(self, adapi: ADAPI, event: str, pattern: Optional[EventPattern]):
+    def __init__(
+        self,
+        adapi: ADAPI,
+        mqtt_base_topic: str,
+        event: str,
+        pattern: Optional[EventPattern],
+    ):
         self.adapi = adapi
+        self.mqtt_base_topic = mqtt_base_topic
         self.event = event
         self._pattern_host = pattern.pattern_host if pattern else None
         self._pattern_event_type = pattern.pattern_event_type if pattern else None
@@ -57,9 +65,9 @@ class EventParts:
             self.adapi.log(f"match failed - improper format: {self.event}")
             return False
 
-        if parts[0] != MQTT_BASE_TOPIC:
+        if parts[0] != self.mqtt_base_topic:
             self.adapi.log(
-                f"split failed - does not start with {MQTT_BASE_TOPIC}: {self.event}"
+                f"split failed - does not start with {self.mqtt_base_topic}: {self.event}"
             )
             return False
 
@@ -112,8 +120,9 @@ class EventListenerDispatcher:
     dispatcher.dispatch(mq_event, payload)
     """
 
-    def __init__(self, adapi: ADAPI):
+    def __init__(self, adapi: ADAPI, mqtt_base_topic: str):
         self.adapi = adapi
+        self.mqtt_base_topic = mqtt_base_topic
 
         self._listeners = {}
 
@@ -160,7 +169,9 @@ class EventListenerDispatcher:
         did_dispatch = False
         results = []
         for name, listener in self._listeners.items():
-            ep = EventParts(self.adapi, mq_event, listener.pattern)
+            ep = EventParts(
+                self.adapi, self.mqtt_base_topic, mq_event, listener.pattern
+            )
             if ep.matches:
                 self.adapi.log(f"dispatcher: dispatching to: {name}")
                 results.append(
@@ -179,18 +190,36 @@ class EventListenerDispatcher:
         return results
 
 
-class HavenHomeModeSync(mqtt.Mqtt):
+class SyncEntitiesViaMqtt(mqtt.Mqtt):
     """
-    This uses MQ to sync the state of Haven's home mode.
+    This syncs the state of selected entities across multiple HA installations via MQTT.
+
+    It requires both HA installations to share state via MQTT (probably via a bridge)
+    with a shared topic (eg: mqtt_shared)
+
+    Devnotes
+    * If you create a new entity with set_state(entity_id="something_new"),
+    it will *create* the entity, but it will not function normally.
+    For instance, you can't use the UI to turn the entity off. You can't
+    even listen on a "call_service" event, since it won't trigger.
+    (Despite what it says here: https://community.home-assistant.io/t/dynamically-create-ha-entity/66869)
+    * Instead, create a read-only sensor.
+    * Then to trigger a change, in the UI override "tap-action" to have it fire off an MQTT message
+    to tell the source machine to turn it change state, which will then reflect back locally.
     """
 
-    HAVEN_MODE_ENTITY = "input_select.home_state"  # Arriving, Home, Leaving, Away
-    SEATTLE_MODE_ENTITY = "input_select.pihaven_home_state"  # Mirror
+    MQTT_DEFAULT_BASE_TOPIC = "mqtt_shared"
+
     SCHEMA = {
         "my_hostname": {
             "required": True,
             "type": "string",
             "regex": "^[^-]+$",  # No dashes permitted
+        },
+        "mqtt_base_topic": {
+            "required": False,
+            "type": "string",
+            "default": MQTT_DEFAULT_BASE_TOPIC,
         },
         "state_for_entities": {
             "required": False,
@@ -205,14 +234,19 @@ class HavenHomeModeSync(mqtt.Mqtt):
         self.state_entities = self.argsn.get("state_for_entities")
         self._state_listeners = set()
         self.my_hostname = self.argsn.get("my_hostname", "HOSTNAME_NOT_SET")
+        self.mqtt_base_topic = self.argsn.get(
+            "mqtt_base_topic", self.MQTT_DEFAULT_BASE_TOPIC
+        )
 
-        self.dispatcher = EventListenerDispatcher(self.get_ad_api())
+        self.dispatcher = EventListenerDispatcher(
+            self.get_ad_api(), self.mqtt_base_topic
+        )
 
         # Note - this will not work if you have previously registered wildcard="#"
         self.mqtt_unsubscribe(
             "#", namespace="mqtt"
         )  # Be safe, though this will hurt other apps. Figure out.
-        self.mqtt_subscribe(f"{MQTT_BASE_TOPIC}/#", namespace="mqtt")
+        self.mqtt_subscribe(f"{self.mqtt_base_topic}/#", namespace="mqtt")
 
         # Register event dispatch listeners - processing INCOMING messages
         self.dispatcher.add_listener("print all", EventPattern(), None)
@@ -236,30 +270,57 @@ class HavenHomeModeSync(mqtt.Mqtt):
         # Register OUTGOING messages
         self.run_in(self.register_state_entities, 0)
 
+        # Register sync_servic
+        self.run_in(self.register_sync_service, 0)
+
+        def test_sync_service(kwargs):
+            self.log('***test_sync_service()***')
+            self.call_service('sync_entities_via_mqtt/toggle_state', entity_id="light.office_piseattle", namespace="default")
+        self.run_in(test_sync_service, 1)
+
         # Listen to all MQ events
         self.listen_event(
             self.mq_listener,
             "MQTT_MESSAGE",
-            wildcard=f"{MQTT_BASE_TOPIC}/#",
+            wildcard=f"{self.mqtt_base_topic}/#",
             namespace="mqtt",
         )
 
-    def entity_add_my_hostname(self, entity: str) -> str:
+    """
+    Entity naming / renaming.
+
+    # Constraints
+    * You need a remote entity to have a HOSTNAME suffix
+    * The suffix can only be alphanumeric characters. Symbols won't work.
+    * EXCEPT - you CAN have underscore (_) 
+        * BUT can't end with it
+        * You can not have two in a row
+    * You can only create *sensor* entities. (Actually, you can create
+      any entity, but they are read only. So sensors are more sensible.)
+
+    # Rules
+    host: seattle, entity: light.office -> sensor.light_office_seattle
+    """
+
+    def entity_add_hostname(self, entity: str, host: str) -> str:
         """
-        light.named_light -> light.named_light_#my_hostname#
+        light.named_light, host -> light.named_light_host
 
         opposite: entity_split_hostname()
         """
-        return f"{entity}_#{self.my_hostname}"
+
+        # Note- you can't use any symbols for the host delimiter. I tried many.
+        # 500 error
+        return f"{entity}_{host}" 
 
     def entity_split_hostname(self, entity: str) -> Tuple[str, Optional[str]]:
         """
-        light.named_light#pihaven# -> ("light.named_light", "pihaven")
+        light.named_light_pihaven -> ("light.named_light", "pihaven")
         light.local_light -> ("light.local_light", None)
 
         opposite: entity_add_myhostname()
         """
-        match = re.fullmatch(r"(.*)_#([^#]+)#", entity)
+        match = re.fullmatch(r"(.*)_([^#]+)", entity)
         if match:
             return (match.group(1), match.group(2))
         else:
@@ -271,33 +332,39 @@ class HavenHomeModeSync(mqtt.Mqtt):
 
     def ping_callback(self, host, event, entity, payload, payload_asobj=None):
         self.log(
-            f"PING/PONG - {MQTT_BASE_TOPIC}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]"
+            f"PING/PONG - {self.mqtt_base_topic}/{host}/pong - {payload} [my_hostname: {self.my_hostname}]"
         )
         self.mqtt_publish(
-            topic=f"{MQTT_BASE_TOPIC}/{self.my_hostname}/pong",
+            topic=f"{self.mqtt_base_topic}/{self.my_hostname}/pong",
             payload=payload,
             namespace="mqtt",
         )
 
     def inbound_state_callback(self, host, event, entity, payload, payload_asobj=None):
-        (entity, host) = self.entity_split_hostname(entity)
-        if host != self.my_hostname:
-            self.log(
-                f"inbound_state_callback(): set_state: /{host}/{event}/{entity} -- {payload}"
-            )
-            self.set_state(f"{entity}_{host}", state=payload, namespace="default")
-        else:
+        (_, entity_host) = self.entity_split_hostname(entity)
+        if entity_host is not None:
             # Should not be here - programming error
             self.log(
                 f"inbound_state_callback(): Ignoring /{host}/{event}/{entity} -- {payload}",
-                level="WARNING",
+                level="ERROR",
             )
+            return
+
+        self.log(
+            f"inbound_state_callback(): set_state: /{host}/{event}/{entity} -- {payload}"
+        )
+
+        remote_entity = self.entity_add_hostname(entity, host)
+        self.log(f"inbound_callback() set_state({remote_entity}, state={payload})")
+        self.set_state(f"{remote_entity}", state=payload, namespace="default")
+
+        
 
     def register_state_entities(self, kwargs):
         def state_callback(entity, attribute, old, new, kwargs):
             self.log(f"state_callback(): {entity} -- {attribute} -- {new}")
             self.mqtt_publish(
-                topic=f"{MQTT_BASE_TOPIC}/{self.my_hostname}/state/{entity}",
+                topic=f"{self.mqtt_base_topic}/{self.my_hostname}/state/{entity}",
                 payload=new,
                 namespace="mqtt",
             )
@@ -307,8 +374,52 @@ class HavenHomeModeSync(mqtt.Mqtt):
             self.log(f"** registered {entity} -- {cur_state}")
             self._state_listeners.add(self.listen_state(state_callback, entity))
 
+    def register_sync_service(self, kwargs):
+        """
+        Register a service for signaling to a remote entity that it should change the state of an object
 
-class TestHavenHomeMode(adplus.Hass):
+        call_service("default", "sync_entities_via_mqtt", "set_state", {"entity_id":"sensor.light_office_pihaven","value":"on"})
+        call_service("default", "sync_entities_via_mqtt", "toggle_state", {"entity_id":"sensor.light_office_pihaven"})
+
+        What it does:
+            mqtt_publish("mqtt_shared/pihaven/state", payload="on")
+        """
+        def sync_service_callback(namespace: str, service: str, action:str, kwargs) -> None:
+            self.log(f'sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
+
+            if namespace !="default" or action not in ["set_state", "toggle_state"] or "entity_id" not in kwargs:
+                raise RuntimeError(f'Invalid parameters: sync_service_callback(namespace={namespace}, service={service}, action={action}, kwargs={kwargs})')
+
+            local_entity = kwargs["entity_id"]
+
+            (remote_entity, remote_host) = self.entity_split_hostname(local_entity)
+            if remote_host is None:
+                raise RuntimeError(f'Programming error - invalid remote_entity_id: {local_entity}')
+
+            if action == "set_state":
+                value = kwargs["value"]
+            elif action == "toggle_state":
+                if not self.entity_exists(local_entity):
+                    raise RuntimeError(f'entity does not exist: {local_entity}')
+                cur_state = self.get_state(entity_id = local_entity)
+                if cur_state == "on":
+                    value = "off"
+                elif cur_state == "off":
+                    value = "on"
+                else:
+                    raise RuntimeError(f'Unexpected state value for {local_entity}: {cur_state}')
+            else:
+                raise RuntimeError(f'Invalid action: |{action}|, type: {type(action)}')
+
+            self.mqtt_publish(topic=f"{self.mqtt_base_topic}/{remote_host}/state/{remote_entity}",
+                payload=value,
+                namespace="mqtt")
+        self.register_service("sync_entities_via_mqtt/change_state", sync_service_callback)
+        self.register_service("sync_entities_via_mqtt/toggle_state", sync_service_callback)
+        self.log('register_service: sync_entities_via_mqtt -- change_state, toggle_state')
+
+
+class TestSyncEntitiesViaMqtt(adplus.Hass):
     """
     This runs some tests that would normally be run under pytest.
     But getting it all working with pytest is more trouble than it is worth.
@@ -323,77 +434,103 @@ class TestHavenHomeMode(adplus.Hass):
 
     def test_event_parts(self, _):
         adapi = self.get_ad_api()
+        mqtt_base_topic = SyncEntitiesViaMqtt.MQTT_DEFAULT_BASE_TOPIC
 
         topic = "BOGUS/pi-haven/ping"
-        assert EventParts(adapi, topic, None).matches is False
+        assert EventParts(adapi, mqtt_base_topic, topic, None).matches is False
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/ping"
-        assert EventParts(adapi, topic, None).matches is True
+        topic = f"{mqtt_base_topic}/pi-haven/ping"
+        assert EventParts(adapi, mqtt_base_topic, topic, None).matches is True
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity/BOGUS"
-        assert EventParts(adapi, topic, None).matches is False
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity/BOGUS"
+        assert EventParts(adapi, mqtt_base_topic, topic, None).matches is False
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
-        assert EventParts(adapi, topic, None).matches is True
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity"
+        assert EventParts(adapi, mqtt_base_topic, topic, None).matches is True
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
-        assert EventParts(adapi, topic, EventPattern("pi-haven")).matches is True
-
-        topic = f"{MQTT_BASE_TOPIC}/BOGUS/state/myentity"
-        assert EventParts(adapi, topic, EventPattern("pi-haven")).matches is False
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity"
         assert (
-            EventParts(adapi, topic, EventPattern(pattern_event_type="state")).matches
+            EventParts(adapi, mqtt_base_topic, topic, EventPattern("pi-haven")).matches
             is True
         )
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/BOGUS/myentity"
+        topic = f"{mqtt_base_topic}/BOGUS/state/myentity"
         assert (
-            EventParts(adapi, topic, EventPattern(pattern_event_type="state")).matches
+            EventParts(adapi, mqtt_base_topic, topic, EventPattern("pi-haven")).matches
             is False
         )
 
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_entity="myentity")).matches
-            is True
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/BOGUS"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_entity="myentity")).matches
-            is False
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/entity"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_host="pi-haven")).matches
-            is True
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-seattle/state/entity"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_host="pi-haven")).matches
-            is False
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/entity"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_host="!pi-haven")).matches
-            is False
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-seattle/state/entity"
-        assert (
-            EventParts(adapi, topic, EventPattern(pattern_host="!pi-haven")).matches
-            is True
-        )
-
-        topic = f"{MQTT_BASE_TOPIC}/pi-haven/state/myentity"
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity"
         assert (
             EventParts(
-                adapi, topic, EventPattern("pi-haven", "state", "myentity")
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_event_type="state")
+            ).matches
+            is True
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/BOGUS/myentity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_event_type="state")
+            ).matches
+            is False
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_entity="myentity")
+            ).matches
+            is True
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/state/BOGUS"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_entity="myentity")
+            ).matches
+            is False
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/state/entity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_host="pi-haven")
+            ).matches
+            is True
+        )
+
+        topic = f"{mqtt_base_topic}/pi-seattle/state/entity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_host="pi-haven")
+            ).matches
+            is False
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/state/entity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_host="!pi-haven")
+            ).matches
+            is False
+        )
+
+        topic = f"{mqtt_base_topic}/pi-seattle/state/entity"
+        assert (
+            EventParts(
+                adapi, mqtt_base_topic, topic, EventPattern(pattern_host="!pi-haven")
+            ).matches
+            is True
+        )
+
+        topic = f"{mqtt_base_topic}/pi-haven/state/myentity"
+        assert (
+            EventParts(
+                adapi,
+                mqtt_base_topic,
+                topic,
+                EventPattern("pi-haven", "state", "myentity"),
             ).matches
             is True
         )
@@ -402,11 +539,12 @@ class TestHavenHomeMode(adplus.Hass):
 
     def test_dispatcher(self, _):
         adapi = self.get_ad_api()
+        mqtt_base_topic = SyncEntitiesViaMqtt.MQTT_DEFAULT_BASE_TOPIC
 
         def callback(host, event_type, entity, payload, payload_as_obj):
             return payload
 
-        dispatcher = EventListenerDispatcher(adapi)
+        dispatcher = EventListenerDispatcher(adapi, mqtt_base_topic)
 
         assert (
             dispatcher.dispatch("mqtt_shared/pi-haven/state/myentity", "1") == []
