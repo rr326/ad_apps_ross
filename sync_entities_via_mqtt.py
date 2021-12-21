@@ -279,7 +279,7 @@ class SyncEntitiesViaMqtt(mqtt.Mqtt):
         self.dispatcher.add_listener(
             "ping/pong",
             EventPattern(
-                pattern_fromhost=f"!{self.my_hostname}",  # Only listen to for events I didn't create
+                pattern_tohost=f"!{self.my_hostname}",  # Only listen to for events I didn't create
                 pattern_event_type="ping",
             ),
             self.ping_callback,
