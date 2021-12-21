@@ -97,7 +97,7 @@ class DashboardSupport(adplus.Hass):
             f"autoclimate/{service}", climate=climate
         )
 
-        if home_mode in ["Home", "Arriving"] :
+        if home_mode in ["Home", "Arriving"]:
             if check("is_offline"):
                 color = "yellow"
             elif check("is_hardoff") and climate == "climate.cabin":
@@ -139,8 +139,8 @@ class DashboardSupport(adplus.Hass):
         #
         overall = self.get_state("app.autoclimate_state")
         overall_color = None
-        if overall == 'offline':
-            overall_color = 'yellow'
+        if overall == "offline":
+            overall_color = "yellow"
         elif home_mode in ["Home", "Arriving"]:
             if overall == "on":
                 overall_color = "green"
@@ -154,7 +154,7 @@ class DashboardSupport(adplus.Hass):
             elif overall == "off":
                 overall_color = "white"
             else:
-                overall_color = "purple" 
+                overall_color = "purple"
         else:
             overall_color = "purple"
 
