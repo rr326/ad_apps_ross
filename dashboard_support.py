@@ -1,5 +1,5 @@
 import json  # noqa
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 
 import adplus
 
@@ -20,9 +20,8 @@ class DashboardSupport(adplus.Hass):
 
     SCHEMA = {
         "test_mode": {"type": "boolean", "default": False, "required": False},
-        "debug": {"type": "boolean", "default": False, "required": False},
         "appname": {"required": False, "type": "string", "default": "dashboard_colors"},
-        "home_state_entity": {"required": False, "type": "string"},
+        "home_state_entity": {"required": True, "type": "string"},
         "app_state": {"required": True, "type": "string"},
         "climate": {
             "type": "dict",
@@ -44,8 +43,8 @@ class DashboardSupport(adplus.Hass):
         self.log("Initialize")
         self.argsn = adplus.normalized_args(self, self.SCHEMA, self.args, debug=False)
         self.test_mode = self.argsn.get("test_mode")
-        self.debug_mode = self.argsn.get("debug")
         self.appname = self.argsn["appname"]
+        self.app_color_entity = f"app.{self.appname}"
         self.climates = self.argsn["climate"]["entities"]
         self.app_state_entity = self.argsn["app_state"]
         self.configured_climates = [
@@ -54,6 +53,9 @@ class DashboardSupport(adplus.Hass):
             "climate.gym",
             "climate.tv_room",
         ]
+        self.home_state_entity = self.argsn["home_state_entity"]
+        self.water_shutoff_valve = "switch.haven_flo_shutoff_valve"
+        self.water_system_mode = "sensor.haven_flo_current_system_mode"
 
         self.colors_dict: Dict[str, Optional[str]] = {
             climate: None for climate in self.climates
@@ -71,14 +73,45 @@ class DashboardSupport(adplus.Hass):
 
     def init_all(self, kwargs):
         self.set_color_for_all()
+        self.set_colors_for_water()
         self.listen_state(
             self.set_color_for_all, entity=self.app_state_entity, attribute="all"
         )
+        self.listen_state(self.set_color_for_all, entity=self.home_state_entity)
+        self.listen_state(self.set_colors_for_water, entity=self.home_state_entity)
+
         self.log("Fully initialized")
 
     def set_color_for_all(self, *args):
         for climate in self.climates:
             self.set_color_for(climate)
+
+    def valid_home_state(self):
+        home_mode = self.get_state(self.home_state_entity)
+        if self.get_state(self.home_state_entity) not in [
+            "Home",
+            "Away",
+            "Arriving",
+            "Leaving",
+        ]:
+            self.warn(f"Unexpected home_mode: {home_mode}")
+            return False
+        return True
+
+    def set_app_state(self, new_dict: dict):
+        """
+        **Merges** state into existsing state
+        """
+        existing = self.get_state(self.app_color_entity, attribute="all")  #
+        if not isinstance(new_dict, dict):
+            self.warn(f"Got unexpected value for {self.app_color_entity}: {new_dict}")
+            return
+        existing = cast(dict, existing)
+        existing = existing.get("attributes", {})
+
+        self.set_state(
+            self.app_color_entity, state="colors", attributes={**existing, **new_dict}
+        )
 
     def set_color_for(self, climate, *args):
         """
@@ -87,40 +120,49 @@ class DashboardSupport(adplus.Hass):
         The first arg will always be climate
         """
 
+        if not self.valid_home_state():
+            return
+
         # Business logic
         color = None
         check = lambda service: self.call_service(
             f"autoclimate/{service}", climate=climate
         )
 
-        # Do not use "home_mode" in Seattle since that is SEATTLE's mode!
-        if check("is_offline"):
-            color = "yellow"
-        elif check("is_hardoff") and climate == "climate.cabin":
-            color = "orange"
-        elif check("is_off"):
-            color = "white"
-        elif check("is_on"):
-            if climate in ["climate.gym", "climate.tv_room"]:
-                color = "red"
+        home_mode = self.get_state(self.home_state_entity)
+        if home_mode in ["Home", "Arriving"]:
+            if check("is_offline"):
+                color = "yellow"
+            elif check("is_hardoff") and climate == "climate.cabin":
+                color = "orange"
+            elif check("is_on"):
+                if climate in ["climate.gym", "climate.tv_room"]:
+                    color = "red"
+                else:
+                    color = "green"
+            elif check("is_off"):
+                color = "white"
             else:
-                color = "pink"
-        elif check("is_error_off"):
-            color = "Silver"  # It's not cabin, so I should know about it, but not a big deal
-        elif check("is_error"):
-            color = "gold"
-        else:
-            self.warn(
-                f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
-            )
-            color = "purple"
+                self.warn(
+                    f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
+                )
+                color = "purple"
+        elif home_mode in ["Away", "Leaving"]:
+            if check("is_offline"):
+                color = "yellow"
+            elif check("is_hardoff") and climate == "climate.cabin":
+                color = "orange"
+            elif check("is_on"):
+                color = "red"
+            elif check("is_off"):
+                color = "white"
+            else:
+                self.warn(
+                    f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
+                )
+                color = "purple"
 
         self.colors_dict[climate] = color
-        if self.debug_mode:
-            self.log(f"{climate:35} -- color: {color}")
-        # Publish as flat state
-        data = {climate: self.colors_dict[climate] for climate in self.climates}
-        self.set_state(f"app.{self.appname}", state="colors", attributes=data)
 
         #
         # Now do overall state
@@ -129,15 +171,62 @@ class DashboardSupport(adplus.Hass):
         overall_color = None
         if overall == "offline":
             overall_color = "yellow"
-        elif overall == "on":
-            overall_color = "pink"
-        elif overall == "off":
-            overall_color = "white"
+        elif home_mode in ["Home", "Arriving"]:
+            if overall == "on":
+                overall_color = "green"
+            elif overall == "off":
+                overall_color = "white"
+            else:
+                overall_color = "purple"
+        elif home_mode in ["Away", "Leaving"]:
+            if overall == "on":
+                overall_color = "red"
+            elif overall == "off":
+                overall_color = "white"
+            else:
+                overall_color = "purple"
         else:
             overall_color = "purple"
 
+        # Flatten
+        data = {climate: self.colors_dict[climate] for climate in self.climates}
         data["overall"] = overall_color
-        if self.debug_mode:
-            self.log(f"{'overall':35} -- color: {overall_color}")
 
-        self.set_state(f"app.{self.appname}", state="colors", attributes=data)
+        self.set_app_state(data)
+
+    def set_colors_for_water(self, *args):
+        if not self.valid_home_state():
+            return
+
+        # Initialize
+        water_shutoff_color = "purple"
+        water_system_mode_color = "purple"
+
+        home_mode = self.get_state(self.home_state_entity)
+        if home_mode in ["Arriving", "Away"]:
+            if self.get_state(self.water_shutoff_valve) in ["off"]:
+                water_shutoff_color = "white"
+            else:
+                water_shutoff_color = "yellow"
+
+            if self.get_state(self.water_system_mode) in ["away"]:
+                water_system_mode_color = "white"
+            else:
+                water_system_mode_color = "yellow"
+        elif home_mode in ["Leaving", "Home"]:
+            if self.get_state(self.water_shutoff_valve) in ["on"]:
+                water_shutoff_color = "green"
+            else:
+                water_shutoff_color = "red"
+
+            if self.get_state(self.water_system_mode) in ["home"]:
+                water_system_mode_color = "green"
+            else:
+                water_system_mode_color = "red"
+
+        self.set_app_state(
+            {
+                "switch.haven_flo_shutoff_valve": water_shutoff_color,
+                "sensor.haven_flo_current_system_mode": water_system_mode_color,
+            }
+        )
