@@ -102,11 +102,12 @@ class DashboardSupport(adplus.Hass):
         """
         **Merges** state into existsing state
         """
-        existing = self.get_state(self.app_color_entity, attribute="all")  #
         if not isinstance(new_dict, dict):
             self.warn(f"Got unexpected value for {self.app_color_entity}: {new_dict}")
             return
-        existing = cast(dict, existing)
+
+        existing = self.get_state(self.app_color_entity, attribute="all")
+        existing = cast(dict, existing) if existing else {}
         existing = existing.get("attributes", {})
 
         self.set_state(
