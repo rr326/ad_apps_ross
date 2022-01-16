@@ -53,7 +53,7 @@ class DashboardSupport(adplus.Hass):
             "climate.gym",
             "climate.tv_room",
         ]
-        self.home_state_entity = self.argsn["home_state_entity"]
+        self.haven_home_state_entity = self.argsn["home_state_entity"]
         self.water_shutoff_valve = "switch.haven_flo_shutoff_valve"
         self.water_system_mode = "sensor.haven_flo_current_system_mode"
 
@@ -77,9 +77,10 @@ class DashboardSupport(adplus.Hass):
         self.listen_state(
             self.set_color_for_all, entity=self.app_state_entity, attribute="all"
         )
-        self.listen_state(self.set_color_for_all, self.home_state_entity)
-        self.listen_state(self.set_colors_for_water, self.home_state_entity)
-
+        self.listen_state(self.set_color_for_all, self.haven_home_state_entity)
+        self.listen_state(self.set_colors_for_water, self.haven_home_state_entity)
+        self.listen_state(self.set_colors_for_water, self.water_system_mode) # Takes a long time to change so watch it
+        
         self.log("Fully initialized")
 
     def set_color_for_all(self, *args):
@@ -87,8 +88,8 @@ class DashboardSupport(adplus.Hass):
             self.set_color_for(climate)
 
     def valid_home_state(self):
-        home_mode = self.get_state(self.home_state_entity)
-        if self.get_state(self.home_state_entity) not in [
+        home_mode = self.get_state(self.haven_home_state_entity)
+        if self.get_state(self.haven_home_state_entity) not in [
             "Home",
             "Away",
             "Arriving",
@@ -130,7 +131,7 @@ class DashboardSupport(adplus.Hass):
             f"autoclimate/{service}", climate=climate
         )
 
-        home_mode = self.get_state(self.home_state_entity)
+        home_mode = self.get_state(self.haven_home_state_entity)
         if home_mode in ["Home", "Arriving"]:
             if check("is_offline"):
                 color = "yellow"
@@ -140,7 +141,7 @@ class DashboardSupport(adplus.Hass):
                 if climate in ["climate.gym", "climate.tv_room"]:
                     color = "red"
                 else:
-                    color = "green"
+                    color = "pink"
             elif check("is_off"):
                 color = "white"
             else:
@@ -174,7 +175,7 @@ class DashboardSupport(adplus.Hass):
             overall_color = "yellow"
         elif home_mode in ["Home", "Arriving"]:
             if overall == "on":
-                overall_color = "green"
+                overall_color = "pink"
             elif overall == "off":
                 overall_color = "white"
             else:
@@ -203,7 +204,7 @@ class DashboardSupport(adplus.Hass):
         water_shutoff_color = "purple"
         water_system_mode_color = "purple"
 
-        home_mode = self.get_state(self.home_state_entity)
+        home_mode = self.get_state(self.haven_home_state_entity)
         if home_mode in ["Arriving", "Away"]:
             if self.get_state(self.water_shutoff_valve) in ["off"]:
                 water_shutoff_color = "white"
@@ -216,14 +217,14 @@ class DashboardSupport(adplus.Hass):
                 water_system_mode_color = "yellow"
         elif home_mode in ["Leaving", "Home"]:
             if self.get_state(self.water_shutoff_valve) in ["on"]:
-                water_shutoff_color = "green"
+                water_shutoff_color = "pink"
             else:
-                water_shutoff_color = "red"
+                water_shutoff_color = "purple"
 
             if self.get_state(self.water_system_mode) in ["home"]:
-                water_system_mode_color = "green"
+                water_system_mode_color = "pink"
             else:
-                water_system_mode_color = "red"
+                water_system_mode_color = "purple"
 
         self.set_app_state(
             {
