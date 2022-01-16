@@ -215,7 +215,7 @@ class DashboardSupport(adplus.Hass):
             else:
                 water_system_mode_color = "yellow"
         elif home_mode in ["Leaving", "Home"]:
-            if self.get_state(self.water_shutoff_valve) in ["on"]:
+            if self.get_state(self.water_shutoff_valve) in ["on", "On"]:
                 water_shutoff_color = "green"
             else:
                 water_shutoff_color = "red"
