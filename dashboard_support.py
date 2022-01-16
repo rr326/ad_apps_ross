@@ -79,6 +79,7 @@ class DashboardSupport(adplus.Hass):
         )
         self.listen_state(self.set_color_for_all, entity=self.home_state_entity)
         self.listen_state(self.set_colors_for_water, entity=self.home_state_entity)
+        self.listen_state(self.set_colors_for_water, entity=self.water_system_mode) # Takes a long time to change, so watch it.
 
         self.log("Fully initialized")
 
@@ -205,7 +206,7 @@ class DashboardSupport(adplus.Hass):
         home_mode = self.get_state(self.home_state_entity)
         if home_mode in ["Arriving", "Away"]:
             if self.get_state(self.water_shutoff_valve) in ["off"]:
-                water_shutoff_color = "rgb(255,255,255)"
+                water_shutoff_color = "white"
             else:
                 water_shutoff_color = "yellow"
 
@@ -223,7 +224,7 @@ class DashboardSupport(adplus.Hass):
                 water_system_mode_color = "green"
             else:
                 water_system_mode_color = "red"
-
+        
         self.set_app_state(
             {
                 "switch.haven_flo_shutoff_valve": water_shutoff_color,
