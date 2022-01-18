@@ -79,8 +79,10 @@ class DashboardSupport(adplus.Hass):
         )
         self.listen_state(self.set_color_for_all, self.haven_home_state_entity)
         self.listen_state(self.set_colors_for_water, self.haven_home_state_entity)
-        self.listen_state(self.set_colors_for_water, self.water_system_mode) # Takes a long time to change so watch it
-        
+        self.listen_state(
+            self.set_colors_for_water, self.water_system_mode
+        )  # Takes a long time to change so watch it
+
         self.log("Fully initialized")
 
     def set_color_for_all(self, *args):
