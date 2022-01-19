@@ -72,12 +72,14 @@ class DashboardSupport(adplus.Hass):
         )  # Give AutoClimate a chance to fully initialize. Prioirity & Dependencies aren't working.
 
     def init_all(self, kwargs):
-        self.set_color_for_all()
+        self.set_color_for_all_climates()
         self.set_colors_for_water()
         self.listen_state(
-            self.set_color_for_all, entity=self.app_state_entity, attribute="all"
+            self.set_color_for_all_climates,
+            entity=self.app_state_entity,
+            attribute="all",
         )
-        self.listen_state(self.set_color_for_all, self.haven_home_state_entity)
+        self.listen_state(self.set_color_for_all_climates, self.haven_home_state_entity)
         self.listen_state(self.set_colors_for_water, self.haven_home_state_entity)
         self.listen_state(
             self.set_colors_for_water, self.water_system_mode
@@ -85,9 +87,9 @@ class DashboardSupport(adplus.Hass):
 
         self.log("Fully initialized")
 
-    def set_color_for_all(self, *args):
+    def set_color_for_all_climates(self, *args):
         for climate in self.climates:
-            self.set_color_for(climate)
+            self.set_color_for_climate(climate)
 
     def valid_home_state(self):
         home_mode = self.get_state(self.haven_home_state_entity)
@@ -97,7 +99,9 @@ class DashboardSupport(adplus.Hass):
             "Arriving",
             "Leaving",
         ]:
-            self.warn(f"Unexpected home_mode: {home_mode}")
+            self.warn(
+                f"Unexpected home_mode: {home_mode}. entity: {self.haven_home_state_entity}"
+            )
             return False
         return True
 
@@ -117,23 +121,23 @@ class DashboardSupport(adplus.Hass):
             self.app_color_entity, state="colors", attributes={**existing, **new_dict}
         )
 
-    def set_color_for(self, climate, *args):
+    def set_color_for_climate(self, climate, *args):
         """
         Can be called as state callback or normal, non-callback call.
 
         The first arg will always be climate
         """
 
-        if not self.valid_home_state():
-            return
+        # if not self.valid_home_state():
+        #     return
 
         # Business logic
-        color = None
+        color = "purple"  # default (error)
         check = lambda service: self.call_service(
             f"autoclimate/{service}", climate=climate
         )
-
         home_mode = self.get_state(self.haven_home_state_entity)
+
         if home_mode in ["Home", "Arriving"]:
             if check("is_offline"):
                 color = "yellow"
@@ -150,7 +154,6 @@ class DashboardSupport(adplus.Hass):
                 self.warn(
                     f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
                 )
-                color = "purple"
         elif home_mode in ["Away", "Leaving"]:
             if check("is_offline"):
                 color = "yellow"
@@ -164,7 +167,10 @@ class DashboardSupport(adplus.Hass):
                 self.warn(
                     f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
                 )
-                color = "purple"
+        else:
+            self.warn(
+                f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
+            )
 
         self.colors_dict[climate] = color
 
@@ -172,7 +178,7 @@ class DashboardSupport(adplus.Hass):
         # Now do overall state
         #
         overall = self.get_state("app.autoclimate_state")
-        overall_color = None
+        overall_color = "purple"
         if overall == "offline":
             overall_color = "yellow"
         elif home_mode in ["Home", "Arriving"]:
@@ -180,17 +186,11 @@ class DashboardSupport(adplus.Hass):
                 overall_color = "pink"
             elif overall == "off":
                 overall_color = "white"
-            else:
-                overall_color = "purple"
         elif home_mode in ["Away", "Leaving"]:
             if overall == "on":
                 overall_color = "red"
             elif overall == "off":
                 overall_color = "white"
-            else:
-                overall_color = "purple"
-        else:
-            overall_color = "purple"
 
         # Flatten
         data = {climate: self.colors_dict[climate] for climate in self.climates}
