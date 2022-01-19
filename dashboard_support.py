@@ -79,7 +79,9 @@ class DashboardSupport(adplus.Hass):
         )
         self.listen_state(self.set_color_for_all, entity=self.home_state_entity)
         self.listen_state(self.set_colors_for_water, entity=self.home_state_entity)
-        self.listen_state(self.set_colors_for_water, entity=self.water_system_mode) # Takes a long time to change, so watch it.
+        self.listen_state(
+            self.set_colors_for_water, entity=self.water_system_mode
+        )  # Takes a long time to change, so watch it.
 
         self.log("Fully initialized")
 
@@ -104,7 +106,7 @@ class DashboardSupport(adplus.Hass):
         **Merges** state into existsing state
         """
         if self.entity_exists(self.app_color_entity):
-            existing = self.get_state(self.app_color_entity, attribute="all")  
+            existing = self.get_state(self.app_color_entity, attribute="all")
         else:
             existing = {}
 
@@ -208,27 +210,37 @@ class DashboardSupport(adplus.Hass):
         water_system_mode_color = "purple"
 
         home_mode = self.get_state(self.home_state_entity)
+        water_shutoff_state = self.get_state(self.water_shutoff_valve)
+        water_shutoff_state = (
+            water_shutoff_state.lower()
+            if isinstance(water_shutoff_state, str)
+            else None
+        )
+        water_system_mode = self.get_state(self.water_system_mode)
+        water_system_mode = (
+            water_system_mode.lower() if isinstance(water_system_mode, str) else None
+        )
         if home_mode in ["Arriving", "Away"]:
-            if self.get_state(self.water_shutoff_valve) in ["off"]:
+            if water_shutoff_state == "off":
                 water_shutoff_color = "white"
             else:
                 water_shutoff_color = "yellow"
 
-            if self.get_state(self.water_system_mode) in ["away"]:
+            if water_system_mode == "away":
                 water_system_mode_color = "white"
             else:
                 water_system_mode_color = "yellow"
         elif home_mode in ["Leaving", "Home"]:
-            if self.get_state(self.water_shutoff_valve) in ["on", "On"]:
+            if water_shutoff_state == "on":
                 water_shutoff_color = "green"
             else:
                 water_shutoff_color = "red"
 
-            if self.get_state(self.water_system_mode) in ["home"]:
+            if water_system_mode == "home":
                 water_system_mode_color = "green"
             else:
                 water_system_mode_color = "red"
-        
+
         self.set_app_state(
             {
                 "switch.haven_flo_shutoff_valve": water_shutoff_color,
