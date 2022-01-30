@@ -80,6 +80,9 @@ class DashboardSupport(adplus.Hass):
         self.listen_state(self.set_color_for_all, entity=self.home_state_entity)
         self.listen_state(self.set_colors_for_water, entity=self.home_state_entity)
         self.listen_state(
+            self.set_colors_for_water, entity=self.water_shutoff_valve
+        ) 
+        self.listen_state(
             self.set_colors_for_water, entity=self.water_system_mode
         )  # Takes a long time to change, so watch it.
 
@@ -210,16 +213,8 @@ class DashboardSupport(adplus.Hass):
         water_system_mode_color = "purple"
 
         home_mode = self.get_state(self.home_state_entity)
-        water_shutoff_state = self.get_state(self.water_shutoff_valve)
-        water_shutoff_state = (
-            water_shutoff_state.lower()
-            if isinstance(water_shutoff_state, str)
-            else None
-        )
-        water_system_mode = self.get_state(self.water_system_mode)
-        water_system_mode = (
-            water_system_mode.lower() if isinstance(water_system_mode, str) else None
-        )
+        water_shutoff_state = str(self.get_state(self.water_shutoff_valve)).lower()
+        water_system_mode = str(self.get_state(self.water_system_mode)).lower()
         if home_mode in ["Arriving", "Away"]:
             if water_shutoff_state == "off":
                 water_shutoff_color = "white"
