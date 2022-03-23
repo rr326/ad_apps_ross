@@ -217,9 +217,6 @@ class DashboardSupport(adplus.Hass):
                 water_shutoff_color = "white"
             else:
                 water_shutoff_color = "yellow"
-                self.log(
-                    f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}"
-                )
 
             if water_system_mode_state == "away":
                 water_system_mode_color = "white"
@@ -235,6 +232,14 @@ class DashboardSupport(adplus.Hass):
                 water_system_mode_color = "pink"
             else:
                 water_system_mode_color = "purple"
+                
+        if water_shutoff_valve_state == "unavailable":
+            # For some reason this device often shows "unavailable" and stays that way. Force a retry in one hour. Just in case that helps!
+            self.log(
+                    f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}. Will try again in 1 hour."
+                )
+            self.run_in(self.set_colors_for_water, 60*60)
+            pass
 
         self.set_app_state(
             {
