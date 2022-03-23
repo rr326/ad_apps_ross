@@ -69,7 +69,7 @@ class Sonos(adplus.Hass):
                 "volume": dev.volume,
                 "play_mode": dev.play_mode,
                 "transport_info": dev.get_current_transport_info(),
-                "current_media_info": clipdict(dev.get_current_media_info()),
+                "current_media_info": (dev.get_current_media_info()),
                 "current_track_info": clipdict(dev.get_current_track_info()),
                 # "speaker_info": dev.get_speaker_info()
             }
@@ -105,7 +105,13 @@ class Sonos(adplus.Hass):
 
         device = self.get_device_by_name(data["player_name"], raise_on_notfound=True)
         device.ramp_to_volume(data["volume"], ramp_type=data["ramp_to_volume"])
+        if data.get("channel") == "Spotify":
+            if data.get("shuffle"):
+                device.play_mode = "SHUFFLE"
+            else:
+                device.play_mode = "NORMAL"
         device.play_uri(uri=data["uri"], start=True)
+
 
     def cb_event_stop(self, event_name, data, kwargs):
         self.log(f"Stop: {data['player_name']}")
