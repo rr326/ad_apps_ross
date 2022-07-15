@@ -70,7 +70,7 @@ class Sonos(adplus.Hass):
                 "play_mode": dev.play_mode,
                 "transport_info": dev.get_current_transport_info(),
                 "current_media_info": (dev.get_current_media_info()),
-                "current_track_info": clipdict(dev.get_current_track_info()),
+                "current_track_info": (dev.get_current_track_info()),
                 # "speaker_info": dev.get_speaker_info()
             }
         data = {
