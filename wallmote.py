@@ -73,7 +73,11 @@ class WallmoteApp(adplus.Hass):
         """
         if button == 1 and press_type == "KeyPressed":
             self.toggle("switch.fan_in_loft")
-            self.ll_success("Toggle fan in loft")
+            cur_state = self.get_state("switch.fan_in_loft")
+            self.ll_success(f"Fan in loft set to: {cur_state.upper()}")
+        else:
+            if self.debug_mode:
+                self.warn(f"Wallmote node_id {self.zwave_node_id} - Unexpected button ({button})/ press_type ({press_type}) combination.")
 
 
 """
