@@ -1,8 +1,9 @@
 import json
 from pathlib import Path
+from typing import cast
 
 import adplus
-import pysonos as soco
+import soco
 
 adplus.importlib.reload(adplus)
 
@@ -46,7 +47,7 @@ class Sonos(adplus.Hass):
         return
 
     def describe_sonos_system(self, kwargs):
-        devices = list(soco.discover())
+        devices = list(cast(set, soco.discovery.discover()))
         favorites = list(soco.music_library.MusicLibrary().get_sonos_favorites())
         devices_simple = {}
 
