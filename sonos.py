@@ -113,7 +113,6 @@ class Sonos(adplus.Hass):
                 device.play_mode = "NORMAL"
         device.play_uri(uri=data["uri"], start=True)
 
-
     def cb_event_stop(self, event_name, data, kwargs):
         self.log(f"Stop: {data['player_name']}")
 

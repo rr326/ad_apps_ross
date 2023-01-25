@@ -117,11 +117,14 @@ class DashboardSupport(adplus.Hass):
         existing = cast(dict, existing) if existing else {}
         existing = existing.get("attributes", {})
 
-        orig_state = self.get_state(self.app_color_entity)
+        self.get_state(self.app_color_entity)
         self.set_state(
-            self.app_color_entity, state="colors", attributes={**existing, **new_dict}, replace=True
+            self.app_color_entity,
+            state="colors",
+            attributes={**existing, **new_dict},
+            replace=True,
         )
-        new_state = self.get_state(self.app_color_entity)
+        self.get_state(self.app_color_entity)
 
     def set_color_for_climate(self, climate, *args):
         """
@@ -135,11 +138,14 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = "purple"  # default (error)
+
         def check(service: str):
             retval = self.call_service(
-            f"autoclimate/{service}", climate=climate, return_result=True
+                f"autoclimate/{service}", climate=climate, return_result=True
             )
-            self.log(f"**DEBUG: autoclimate/{service} for {climate} = |{retval}|, type: {type(retval)}. Home_mode = {self.get_state(self.haven_home_state_entity)}")
+            self.log(
+                f"**DEBUG: autoclimate/{service} for {climate} = |{retval}|, type: {type(retval)}. Home_mode = {self.get_state(self.haven_home_state_entity)}"
+            )
             return retval
 
         home_mode = self.get_state(self.haven_home_state_entity)
@@ -175,7 +181,9 @@ class DashboardSupport(adplus.Hass):
                 )
         elif home_mode is None:
             color = "yellow"
-            self.log(f"Haven home_mode is None. (entity: {self.haven_home_state_entity})")
+            self.log(
+                f"Haven home_mode is None. (entity: {self.haven_home_state_entity})"
+            )
         else:
             self.warn(
                 f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
@@ -241,14 +249,13 @@ class DashboardSupport(adplus.Hass):
                 water_system_mode_color = "pink"
             else:
                 water_system_mode_color = "purple"
-                
+
         if water_shutoff_valve_state == "unavailable":
             # For some reason this device often shows "unavailable" and stays that way. Force a retry in one hour. Just in case that helps!
             self.log(
-                    f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}. Will try again in 1 hour."
-                )
-            self.run_in(self.set_colors_for_water, 60*60)
-            pass
+                f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}. Will try again in 1 hour."
+            )
+            self.run_in(self.set_colors_for_water, 60 * 60)
 
         self.set_app_state(
             {
@@ -256,4 +263,3 @@ class DashboardSupport(adplus.Hass):
                 "sensor.haven_flo_current_system_mode": water_system_mode_color,
             }
         )
-

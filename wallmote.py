@@ -1,6 +1,5 @@
 # pyright: reportUnusedCoroutine=false
 
-import datetime as dt
 import adplus
 
 adplus.importlib.reload(adplus)
@@ -77,7 +76,9 @@ class WallmoteApp(adplus.Hass):
             self.ll_success(f"Fan in loft set to: {cur_state.upper()}")
         else:
             if self.debug_mode:
-                self.warn(f"Wallmote node_id {self.zwave_node_id} - Unexpected button ({button})/ press_type ({press_type}) combination.")
+                self.warn(
+                    f"Wallmote node_id {self.zwave_node_id} - Unexpected button ({button})/ press_type ({press_type}) combination."
+                )
 
 
 """
