@@ -76,7 +76,7 @@ class DashboardSupport(adplus.Hass):
         self.set_colors_for_water()
         self.listen_state(
             self.set_color_for_all_climates,
-            entity=self.app_state_entity,
+            entity_id=self.app_state_entity,
             attribute="all",
         )
         self.listen_state(self.set_color_for_all_climates, self.haven_home_state_entity)
@@ -117,9 +117,11 @@ class DashboardSupport(adplus.Hass):
         existing = cast(dict, existing) if existing else {}
         existing = existing.get("attributes", {})
 
+        orig_state = self.get_state(self.app_color_entity)
         self.set_state(
-            self.app_color_entity, state="colors", attributes={**existing, **new_dict}
+            self.app_color_entity, state="colors", attributes={**existing, **new_dict}, replace=True
         )
+        new_state = self.get_state(self.app_color_entity)
 
     def set_color_for_climate(self, climate, *args):
         """
@@ -171,6 +173,9 @@ class DashboardSupport(adplus.Hass):
                 self.warn(
                     f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
                 )
+        elif home_mode is None:
+            color = "yellow"
+            self.log(f"Haven home_mode is None. (entity: {self.haven_home_state_entity})")
         else:
             self.warn(
                 f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
@@ -251,3 +256,4 @@ class DashboardSupport(adplus.Hass):
                 "sensor.haven_flo_current_system_mode": water_system_mode_color,
             }
         )
+
