@@ -133,9 +133,13 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = "purple"  # default (error)
-        check = lambda service: self.call_service(
-            f"autoclimate/{service}", climate=climate
-        )
+        def check(service: str):
+            retval = self.call_service(
+            f"autoclimate/{service}", climate=climate, return_result=True
+            )
+            self.log(f"**DEBUG: autoclimate/{service} for {climate} = |{retval}|, type: {type(retval)}. Home_mode = {self.get_state(self.haven_home_state_entity)}")
+            return retval
+
         home_mode = self.get_state(self.haven_home_state_entity)
 
         if home_mode in ["Home", "Arriving"]:
