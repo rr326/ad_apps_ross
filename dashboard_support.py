@@ -181,9 +181,6 @@ class DashboardSupport(adplus.Hass):
                 )
         elif home_mode is None:
             color = "yellow"
-            self.log(
-                f"Haven home_mode is None. (entity: {self.haven_home_state_entity})"
-            )
         else:
             self.warn(
                 f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
