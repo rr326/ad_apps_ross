@@ -4,6 +4,9 @@ from typing import cast
 
 import adplus
 import soco
+import soco.music_library
+import soco.discovery
+
 
 adplus.importlib.reload(adplus)
 
@@ -24,8 +27,9 @@ class Sonos(adplus.Hass):
             * Data: {
                 "player_name": "Marley Bedroom"
                 "favorite": {
-                    "uri": "x-sonosapi-radio:ST%3a36601058461575458?sid=236&flags=8300&sn=6"
-                    "title": "Chick Music"
+                    "uri": "..."
+                    "title": "..."
+                    "meta": "..."
                     }
                 "volume": 25
                 }
@@ -37,6 +41,12 @@ class Sonos(adplus.Hass):
                  "player_name": "Marley Bedroom"
             }
 
+
+    # Playing a song
+
+    * You need to create a sonos-favorite
+    * Then look in sonos_data.json
+    * Copy the uri, meta, and title
     """
 
     def initialize(self):
@@ -48,19 +58,21 @@ class Sonos(adplus.Hass):
 
     def describe_sonos_system(self, kwargs):
         devices = list(cast(set, soco.discovery.discover()))
-        favorites = list(soco.music_library.MusicLibrary().get_sonos_favorites())
+        # favorites = list(soco.music_library.MusicLibrary().get_sonos_favorites())
+        favorites = list(devices[0].get_sonos_favorites().get("favorites", []))
         devices_simple = {}
 
-        def clip(line):
-            MAX_LENGTH = 75
-            line = str(line)
-            if len(line) < MAX_LENGTH:
-                return line
-            else:
-                return line[: MAX_LENGTH - 3] + "..."
+        # Currently not used.
+        # def clip(line):
+        #     MAX_LENGTH = 75
+        #     line = str(line)
+        #     if len(line) < MAX_LENGTH:
+        #         return line
+        #     else:
+        #         return line[: MAX_LENGTH - 3] + "..."
 
-        def clipdict(indict):
-            return {k: clip(v) for k, v in indict.items()}
+        # def clipdict(indict):
+        #     return {k: clip(v) for k, v in indict.items()}
 
         for dev in devices:
             devices_simple[dev.player_name] = {
@@ -76,7 +88,7 @@ class Sonos(adplus.Hass):
             }
         data = {
             "devices": devices_simple,
-            "favorites": [clipdict(favorite.to_dict()) for favorite in favorites],
+            "favorites": favorites,
         }
 
         logfile = Path(self.config_dir) / "../logs/sonos_data.json"
@@ -85,16 +97,16 @@ class Sonos(adplus.Hass):
 
     def get_device_by_name(self, player_name, raise_on_notfound=False):
         try:
-            devices = list(soco.discover())
+            device = soco.discovery.by_name(player_name)
+            if device:
+                return device
         except TypeError as err:
             self.error(
                 f"soco.discover returned None for player: {player_name} err: {err}"
             )
             return None
 
-        for device in devices:
-            if device.player_name == player_name.strip():
-                return device
+        # Not found
         if raise_on_notfound:
             raise adplus.ConfigException(
                 f"Could not find Sonos Device named: {player_name}"
@@ -105,16 +117,20 @@ class Sonos(adplus.Hass):
         self.log(f"PlayFavorite: {data['player_name']}")
 
         device = self.get_device_by_name(data["player_name"], raise_on_notfound=True)
-        device.ramp_to_volume(data["volume"], ramp_type=data["ramp_to_volume"])
-        if data.get("channel") == "Spotify":
-            if data.get("shuffle"):
-                device.play_mode = "SHUFFLE"
-            else:
-                device.play_mode = "NORMAL"
-        device.play_uri(uri=data["uri"], start=True)
+        if device:
+            device.ramp_to_volume(data["volume"], ramp_type=data["ramp_to_volume"])
+            if data.get("uri", "").find("spotify") >= 0:
+                if data.get("shuffle"):
+                    device.play_mode = "SHUFFLE"
+                else:
+                    device.play_mode = "NORMAL"
+            device.play_uri(uri=data["uri"], meta=data["meta"], start=True)
+        else:
+            self.warn(f'Could not play favorite. Could not find {data["player_name"]}')
 
     def cb_event_stop(self, event_name, data, kwargs):
         self.log(f"Stop: {data['player_name']}")
 
         device = self.get_device_by_name(data["player_name"], raise_on_notfound=True)
-        device.stop()
+        if device:
+            device.stop()

@@ -98,6 +98,7 @@ KWARGS_SCHEMA = {
                             "schema": {
                                 "uri": {"required": True, "type": "string"},
                                 "title": {"required": False, "type": "string"},
+                                "meta": {"required": False, "type": "string"},
                             },
                         },
                         "volume": {
@@ -241,6 +242,7 @@ class GentleWakeup(adplus.Hass):
             data["player_name"] = player_name
             data["ramp_to_volume"] = "ALARM_RAMP_TYPE"
             data["uri"] = data["favorite"]["uri"]
+            data["meta"] = data["favorite"]["meta"]
             self.ll_success(f"GentleWakeup - Sonos {player_name}")
             if not self.test_mode:
                 self.fire_event("sonos_app.play_favorite", **data)
