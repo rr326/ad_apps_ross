@@ -123,6 +123,7 @@ class DashboardSupport(adplus.Hass):
             state="colors",
             attributes={**existing, **new_dict},
             replace=True,
+            _silent=True
         )
         self.get_state(self.app_color_entity)
 
