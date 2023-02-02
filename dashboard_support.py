@@ -246,9 +246,9 @@ class DashboardSupport(adplus.Hass):
 
         if water_shutoff_valve_state == "unavailable":
             # For some reason this device often shows "unavailable" and stays that way. Force a retry in one hour. Just in case that helps!
-            self.log(
-                f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}. Will try again in 1 hour."
-            )
+            # self.log(
+            #     f"DEBUG: water_shutoff_valve_state: {water_shutoff_valve_state}. Will try again in 1 hour."
+            # )
             self.run_in(self.set_colors_for_water, 60 * 60)
 
         self.set_app_state(
