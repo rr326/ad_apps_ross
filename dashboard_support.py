@@ -135,8 +135,9 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = None
-        check = lambda service: self.call_service(
-            f"autoclimate/{service}", climate=climate
+        def check(service):
+            return self.call_service(
+            f"autoclimate/{service}", climate=climate, return_result=True
         )
 
         home_mode = self.get_state(self.home_state_entity)
