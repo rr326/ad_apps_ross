@@ -56,6 +56,7 @@ class DashboardSupport(adplus.Hass):
         self.home_state_entity = self.argsn["home_state_entity"]
         self.water_shutoff_valve = "switch.haven_flo_shutoff_valve"
         self.water_system_mode = "sensor.haven_flo_current_system_mode"
+        self.rinnai = "water_heater.haven_rinnai_water_heater"
 
         self.colors_dict: Dict[str, Optional[str]] = {
             climate: None for climate in self.climates
@@ -79,12 +80,12 @@ class DashboardSupport(adplus.Hass):
         )
         self.listen_state(self.set_color_for_all, entity_id=self.home_state_entity)
         self.listen_state(self.set_colors_for_water, entity_id=self.home_state_entity)
-        self.listen_state(
-            self.set_colors_for_water, entity=self.water_shutoff_valve
-        ) 
+        self.listen_state(self.set_colors_for_water, entity=self.water_shutoff_valve)
         self.listen_state(
             self.set_colors_for_water, entity=self.water_system_mode
         )  # Takes a long time to change, so watch it.
+        self.listen_state(self.set_colors_for_rinnai, entity_id=self.home_state_entity)
+        self.listen_state(self.set_colors_for_rinnai, entity=self.rinnai)
 
         self.log("Fully initialized")
 
@@ -135,10 +136,11 @@ class DashboardSupport(adplus.Hass):
 
         # Business logic
         color = None
+
         def check(service):
             return self.call_service(
-            f"autoclimate/{service}", climate=climate, return_result=True
-        )
+                f"autoclimate/{service}", climate=climate, return_result=True
+            )
 
         home_mode = self.get_state(self.home_state_entity)
         if home_mode in ["Home", "Arriving"]:
@@ -241,5 +243,44 @@ class DashboardSupport(adplus.Hass):
             {
                 "switch.haven_flo_shutoff_valve": water_shutoff_color,
                 "sensor.haven_flo_current_system_mode": water_system_mode_color,
+            }
+        )
+
+    def set_colors_for_rinnai(self, *args):
+        if not self.valid_home_state():
+            return
+
+        # Initialize
+        rinnai_away_color = "purple"
+        rinnai_temp_color = "purple"
+
+        home_mode = self.get_state(self.home_state_entity)
+        rinnai_away_state = self.get_state(self.rinnai, attribute="away_mode")
+        rinnai_temp = int(self.get_state(self.rinnai, attribute="temperature"))
+        if home_mode in ["Arriving", "Leaving", "Away"]:
+            if rinnai_away_state == "on":
+                rinnai_away_color = "white"
+            else:
+                rinnai_away_color = "red"
+
+            if rinnai_temp == 125:
+                rinnai_temp_color = "white"
+            else:
+                rinnai_temp_color = "yellow"
+        elif home_mode in ["Home"]:
+            if rinnai_away_state == "on":
+                rinnai_away_color = "green"
+            else:
+                rinnai_away_color = "red"
+
+            if rinnai_temp == 125:
+                rinnai_temp_color = "green"
+            else:
+                rinnai_temp_color = "red"
+
+        self.set_app_state(
+            {
+                "haven_rinnai_away_mode": rinnai_away_color,
+                "haven_rinnai_set_temperature": rinnai_temp_color,
             }
         )
