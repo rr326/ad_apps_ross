@@ -268,7 +268,7 @@ class DashboardSupport(adplus.Hass):
             else:
                 rinnai_temp_color = "yellow"
         elif home_mode in ["Home"]:
-            if rinnai_away_state == "on":
+            if rinnai_away_state == "off":
                 rinnai_away_color = "green"
             else:
                 rinnai_away_color = "red"
