@@ -1,5 +1,6 @@
 # pyright: reportUnusedCoroutine=false
 
+import time
 import adplus
 
 adplus.importlib.reload(adplus)
@@ -70,10 +71,18 @@ class WallmoteApp(adplus.Hass):
 
         "KeyHeldDown" will usually repeat multiple times, followed by a single KeyReleased
         """
+        if self.debug_mode:
+                self.info(
+                    f"take_action: zone: {self.zwave_node_id} - button: {button} - key: {press_type}"
+                )
         if button == 1 and press_type == "KeyPressed":
-            self.toggle("switch.fan_in_loft")
-            cur_state = self.get_state("switch.fan_in_loft")
-            self.ll_success(f"Fan in loft set to: {cur_state.upper()}")
+            old_state = self.get_state("switch.fan_in_loft")
+            self.toggle("switch.fan_in_loft") 
+            time.sleep(3) # Wait for results      
+            new_state = self.get_state("switch.fan_in_loft")
+            self.ll_success(f"Fan in loft toggled: {old_state} --> {new_state}")
+            if True or self.debug_mode:
+                self.info(f"Wallmote - triggered toggle fan_in_loft. Old_state: {old_state} --> {new_state}")
         else:
             if self.debug_mode:
                 self.warn(
