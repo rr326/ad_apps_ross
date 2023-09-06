@@ -1,4 +1,5 @@
 import json  # noqa
+import datetime
 from typing import Dict, Optional, cast
 
 import adplus
@@ -257,7 +258,24 @@ class DashboardSupport(adplus.Hass):
         home_mode = self.get_state(self.home_state_entity)
         rinnai_away_state = self.get_state(self.rinnai, attribute="away_mode")
         rinnai_temp = int(self.get_state(self.rinnai, attribute="temperature"))
-        if home_mode in ["Arriving", "Leaving", "Away"]:
+
+        is_old_data = True
+        try:
+            last_updated = datetime.datetime.fromisoformat(
+                datestr := self.get_state(self.rinnai, attribute="last_updated")
+            )
+            now = cast(datetime.datetime, self.get_now())
+            if now - last_updated <= datetime.timedelta(minutes=30):
+                is_old_data = False
+        except Exception as err:
+            self.error(
+                f"Error getting last_updated time for {self.rinnai} -- {datestr}: {err}"
+            )
+
+        if is_old_data:
+            rinnai_away_color = "orange"
+            rinnai_temp_color = "orange"
+        elif home_mode in ["Arriving", "Leaving", "Away"]:
             if rinnai_away_state == "on":
                 rinnai_away_color = "white"
             else:
