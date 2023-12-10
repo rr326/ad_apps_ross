@@ -4,9 +4,8 @@ from typing import cast
 
 import adplus
 import soco
-import soco.music_library
 import soco.discovery
-
+import soco.music_library
 
 adplus.importlib.reload(adplus)
 

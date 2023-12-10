@@ -136,7 +136,6 @@ class LightFade(adplus.Hass):
             )
 
     def cb_fader(self, kwargs):
-
         entity_id = kwargs["entity_id"]
         bright_start = kwargs["bright_start"]
         bright_end = kwargs["bright_end"]

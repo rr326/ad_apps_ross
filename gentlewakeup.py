@@ -179,7 +179,7 @@ class GentleWakeup(adplus.Hass):
             self.app_entity,
             state="off",
             attributes={"friendly_name": "Running: Gentle Wakeup"},
-            _silent=True
+            _silent=True,
         )
 
         self.argsn = adplus.normalized_args(self, KWARGS_SCHEMA, self.args, debug=False)
