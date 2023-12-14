@@ -207,7 +207,7 @@ class GentleWakeup(adplus.Hass):
         return daymap[day] in config["schedule"]["constrain_days_set"]
 
     def cb_gw_on(self, kwargs):
-        self.lb_log("Starting")
+        self.log("Starting")
         self.set_state(self.app_entity, state="on")
 
         config = kwargs["config"]
@@ -262,7 +262,7 @@ class GentleWakeup(adplus.Hass):
             self.run_in(self.cb_gw_off, 5, config=config)
 
     def cb_gw_off(self, kwargs):
-        self.lb_log(f"Turning off")
+        self.log(f"Turning off")
         self.set_state(self.app_entity, state="off")
 
         config = kwargs["config"]
