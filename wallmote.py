@@ -45,9 +45,7 @@ class WallmoteApp(adplus.Hass):
             )
 
         if data["node_id"] != self.zwave_node_id:
-            self.warning(
-                f'Improper Wallmote zwave_node_id. Got: {data["node_id"]}. Expected: {self.zwave_node_id}'
-            )
+            # Other devices can signal this event. For instance, new Enbrighten switch
             return
 
         if data["command_class_name"] != Wallmote.COMMAND_CLASS_NAME:
