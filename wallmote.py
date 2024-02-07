@@ -35,6 +35,7 @@ class WallmoteApp(adplus.Hass):
         self.argsn = adplus.normalized_args(self, self.SCHEMA, self.args, debug=False)
         self.zwave_node_id = self.argsn.get("zwave_node_id")
         self.debug_mode = self.argsn["debug_mode"]
+        self.climate = "climate.seattle_hvac"
 
         self.listen_event(self.event_listener, Wallmote.EVENT_NAME)
 
@@ -84,6 +85,12 @@ class WallmoteApp(adplus.Hass):
                 self.info(
                     f"Wallmote - triggered toggle fan_in_loft. Old_state: {old_state} --> {new_state}"
                 )
+                
+        elif button==2 and press_type == "KeyPressed":
+            self.lb_log(
+                f'Button 2 pressed: Calling mitsubishi/set_to_home_state'
+            )
+            self.call_service("mitsubishi/set_to_home_state")            
         else:
             if self.debug_mode:
                 self.warn(
