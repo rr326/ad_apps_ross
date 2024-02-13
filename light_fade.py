@@ -66,6 +66,7 @@ class LightFade(adplus.Hass):
         brightness_start = (
             args["brightness_start"] if args["brightness_start"] else current_brightness
         )
+        brightness_start = brightness_start or 0
         brightness_end = args["brightness_end"]
         duration = args["duration"]
         increase = brightness_end >= brightness_start
