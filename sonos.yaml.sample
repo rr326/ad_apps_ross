@@ -1,3 +1,0 @@
-SonosApp:
-  module: sonos
-  class: Sonos
