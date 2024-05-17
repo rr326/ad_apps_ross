@@ -42,7 +42,7 @@ class LightFade(adplus.Hass):
     @staticmethod
     def val_to_pct(val: int) -> float:
         "brigtness pct to brightness val"
-        v = max(0, min(255, val))  # HA actually gave me a value > 255!
+        v = max(0, min(255, val if val is not None else 0 ))  # HA actually gave me a value > 255!
         return v / 255
 
     @staticmethod
