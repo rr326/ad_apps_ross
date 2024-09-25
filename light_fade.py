@@ -150,9 +150,19 @@ class LightFade(adplus.Hass):
         current_brightness_val = self.get_state(
             entity_id, attribute="brightness", default=0
         )
-        self.debug(
-            f"cb_fader step_num: {last_step:3} -- current: {current_brightness_val:3} -- last target: {bright_target:3} -- start: {bright_start} -- end: {bright_end} -- step_duration: {step_duration} -- step_size: {step_size} "
-        )
+        try:
+            self.debug(
+                f"cb_fader step_num: {last_step:3} -- current: {current_brightness_val:3} -- last target: {bright_target:3} -- start: {bright_start} -- end: {bright_end} -- step_duration: {step_duration} -- step_size: {step_size} "
+            )
+        except Exception as e:
+            self.debug(f"Error in self.dubug for light_fade: {e}")
+            self.debug(last_step)
+            self.debug(current_brightness_val)
+            self.debug(bright_target)
+            self.debug(bright_start)
+            self.debug(bright_end)
+            self.debug(step_duration)
+            self.debug(step_size)
 
         CLOSE_ENOUGH = 5
         if (
