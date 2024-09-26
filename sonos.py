@@ -17,7 +17,7 @@ class Sonos(adplus.Hass):
 
     # Sonos services
     * describe_sonos_system (dumps to logs/sonos_data.json upon startup)
-    * play_favorite
+    * play_favorites
     * stop
 
     ## play_favorite
@@ -56,7 +56,7 @@ class Sonos(adplus.Hass):
         return
 
     def describe_sonos_system(self, kwargs):
-        devices = list(cast(set, soco.discovery.discover()))
+        devices = list(cast(set, soco.discover()))
         # favorites = list(soco.music_library.MusicLibrary().get_sonos_favorites())
         favorites = list(devices[0].get_sonos_favorites().get("favorites", []))
         devices_simple = {}
