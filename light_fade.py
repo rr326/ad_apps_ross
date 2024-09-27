@@ -150,6 +150,8 @@ class LightFade(adplus.Hass):
         current_brightness_val = self.get_state(
             entity_id, attribute="brightness", default=0
         )
+        if current_brightness_val is None:
+            current_brightness_val = 0 # this shouldn't happen, but it is.
         try:
             self.debug(
                 f"cb_fader step_num: {last_step:3} -- current: {current_brightness_val:3} -- last target: {bright_target:3} -- start: {bright_start} -- end: {bright_end} -- step_duration: {step_duration} -- step_size: {step_size} "
