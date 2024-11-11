@@ -223,7 +223,7 @@ class DashboardSupport(adplus.Hass):
             if water_shutoff_state == "off":
                 water_shutoff_color = "white"
             else:
-                water_shutoff_color = "white" # Not doing vacation mode anymore. Does not work reliably.
+                water_shutoff_color = "red" 
 
             if water_system_mode == "away":
                 water_system_mode_color = "white"
