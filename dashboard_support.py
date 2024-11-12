@@ -275,16 +275,16 @@ class DashboardSupport(adplus.Hass):
         rinnai_temp = int(self.get_state(self.rinnai, attribute="temperature"))
         if home_mode in ["Arriving", "Leaving", "Away"]:
             if rinnai_away_state == "on":
-                rinnai_away_color = "red"
-            else:
                 rinnai_away_color = "white"
+            else:
+                rinnai_away_color = "red"
 
             if rinnai_temp == 125:
                 rinnai_temp_color = "white"
             else:
                 rinnai_temp_color = "yellow"
         elif home_mode in ["Home"]:
-            if rinnai_away_state == "on":
+            if rinnai_away_state == "off":
                 rinnai_away_color = "green"
             else:
                 rinnai_away_color = "red"
