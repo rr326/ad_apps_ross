@@ -1,5 +1,6 @@
-import json  # noqa
 import datetime
+import json  # noqa
+from copy import deepcopy
 from typing import Dict, Optional, cast
 
 import adplus
@@ -106,24 +107,27 @@ class DashboardSupport(adplus.Hass):
             return False
         return True
 
-    def set_app_state(self, new_dict: dict):
+    def set_app_state(self, new_attrs: dict):
         """
         **Merges** state into existsing state
         """
+        existing_state = {}
         if self.entity_exists(self.app_color_entity):
-            existing = self.get_state(self.app_color_entity, attribute="all")
-        else:
-            existing = {}
+            existing_state = self.get_state(self.app_color_entity, attribute="all")
+        existing_attrs = existing_state.get("attributes", {})
+        orig_attrs = deepcopy(existing_attrs)
 
-        if not isinstance(new_dict, dict):
-            self.warn(f"Got unexpected value for {self.app_color_entity}: {new_dict}")
+        if not isinstance(new_attrs, dict):
+            self.warn(f"Got unexpected value for {self.app_color_entity}: {new_attrs}")
             return
-        existing = cast(dict, existing)
-        existing = existing.get("attributes", {})
 
-        self.set_state(
-            self.app_color_entity, state="colors", attributes={**existing, **new_dict}
-        )
+        merged_attrs = {**existing_attrs, **new_attrs}
+        if orig_attrs != merged_attrs:
+            self.set_state(
+                self.app_color_entity,
+                state="colors",
+                attributes={**existing_attrs, **new_attrs},
+            )
 
     def set_color_for(self, climate, *args):
         """
@@ -139,9 +143,16 @@ class DashboardSupport(adplus.Hass):
         color = None
 
         def check(service):
-            return self.call_service(
-                f"autoclimate/{service}", climate=climate, return_result=True
-            )
+            try:
+                return self.call_service(
+                    f"autoclimate/{service}",
+                    climate=climate,
+                    return_result=True,
+                    namespace="default",
+                )
+            except Exception as err:
+                self.error(f"call_service returned error: {err}")
+                return None
 
         home_mode = self.get_state(self.home_state_entity)
         if home_mode in ["Home", "Arriving"]:
@@ -158,7 +169,7 @@ class DashboardSupport(adplus.Hass):
                 color = "white"
             else:
                 self.warn(
-                    f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
+                    f"Unexpected autoclimate state for climate: {climate}. State: {check('entity_state')}"
                 )
                 color = "purple"
         elif home_mode in ["Away", "Leaving"]:
@@ -223,12 +234,14 @@ class DashboardSupport(adplus.Hass):
             if water_shutoff_state == "off":
                 water_shutoff_color = "white"
             else:
-                water_shutoff_color = "red" 
+                water_shutoff_color = "red"
 
             if water_system_mode == "away":
                 water_system_mode_color = "white"
             else:
-                water_system_mode_color = "white" # Not doing vacation mode anymore. Does not work reliably.
+                water_system_mode_color = (
+                    "white"  # Not doing vacation mode anymore. Does not work reliably.
+                )
         elif home_mode in ["Leaving", "Home"]:
             if water_shutoff_state == "on":
                 water_shutoff_color = "green"
