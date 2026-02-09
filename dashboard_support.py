@@ -147,7 +147,6 @@ class DashboardSupport(adplus.Hass):
                 return self.call_service(
                     f"autoclimate/{service}",
                     climate=climate,
-                    return_result=True,
                     namespace="default",
                 )
             except Exception as err:
