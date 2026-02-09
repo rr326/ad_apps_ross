@@ -154,6 +154,11 @@ class DashboardSupport(adplus.Hass):
                 return None
 
         home_mode = self.get_state(self.home_state_entity)
+        state = check("entity_state")
+        if state is None:
+            # AutoClimate not yet initialized; skip silently
+            return
+
         if home_mode in ["Home", "Arriving"]:
             if check("is_offline"):
                 color = "yellow"
@@ -168,7 +173,7 @@ class DashboardSupport(adplus.Hass):
                 color = "white"
             else:
                 self.warn(
-                    f"Unexpected autoclimate state for climate: {climate}. State: {check('entity_state')}"
+                    f"Unexpected autoclimate state for climate: {climate}. State: {state}"
                 )
                 color = "purple"
         elif home_mode in ["Away", "Leaving"]:
@@ -182,7 +187,7 @@ class DashboardSupport(adplus.Hass):
                 color = "white"
             else:
                 self.warn(
-                    f"Unexpected state for climate: {climate}. State: {check('entity_state')}"
+                    f"Unexpected state for climate: {climate}. State: {state}"
                 )
                 color = "purple"
 
