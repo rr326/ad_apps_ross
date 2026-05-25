@@ -20,8 +20,8 @@ incomplete work that didn't make it into `main`:
 
 Full divergence history is in the `old_master` branch.
 
-Cleanup context (consumer-side): `docs/ad_code_cleanup.md` in
-`rr326/haconfig` (the haconfig repo, per-host branches).
+Open shared-app TODOs (sonos fix, simplification audit) are tracked in
+the consumer repo (`rr326/haconfig`) under `README_shared.md`.
 
 ## Apps
 
