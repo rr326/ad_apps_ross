@@ -274,7 +274,21 @@ class DashboardSupport(adplus.Hass):
 
         home_mode = self.get_state(self.home_state_entity)
         rinnai_away_state = self.get_state(self.rinnai, attribute="away_mode")
-        rinnai_temp = int(self.get_state(self.rinnai, attribute="temperature"))
+        raw_temp = self.get_state(self.rinnai, attribute="temperature")
+
+        # During the Rinnai integration's hourly OAuth-token refresh, attributes
+        # briefly come back as None. Treat that the same as stale data (orange)
+        # and bail; the next state change after reload will recolor correctly.
+        if rinnai_away_state is None or raw_temp is None:
+            self.set_app_state(
+                {
+                    "haven_rinnai_away_mode": "orange",
+                    "haven_rinnai_set_temperature": "orange",
+                }
+            )
+            return
+
+        rinnai_temp = int(raw_temp)
 
         is_old_data = True
         try:
