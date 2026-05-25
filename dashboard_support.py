@@ -127,23 +127,10 @@ class DashboardSupport(adplus.Hass):
                 self.app_color_entity,
                 state="colors",
                 attributes={**existing_attrs, **new_attrs},
+                _silent=True,
             )
 
-<<<<<<< HEAD
     def set_color_for(self, climate, *args):
-=======
-        self.get_state(self.app_color_entity)
-        self.set_state(
-            self.app_color_entity,
-            state="colors",
-            attributes={**existing, **new_dict},
-            replace=True,
-            _silent=True
-        )
-        self.get_state(self.app_color_entity)
-
-    def set_color_for_climate(self, climate, *args):
->>>>>>> bc56628 (Fixed warning where new entity is created on first read. _silent=True)
         """
         Can be called as state callback or normal, non-callback call.
 
