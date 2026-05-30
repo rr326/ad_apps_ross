@@ -39,7 +39,7 @@ class BackupHa(adplus.Hass):
         self.backup_dir = Path("/ha_backups")
         self.MINDATE = dt.datetime(dt.MINYEAR, 1, 1)
 
-        self.log(f"Initialize")
+        self.log("Initialize")
 
         self.run_in(self.maybe_backup_now, 0)
         self.run_daily(self.backup_weekly, self.run_at_time)
@@ -72,6 +72,6 @@ class BackupHa(adplus.Hass):
     def backup_weekly(self, _):
         """Once per week, backup"""
         if self.get_now().weekday() != self.day_to_run:
-            self.log(f"DEBUG: backup_weekly - skipping. Wrong day.")
+            self.log("DEBUG: backup_weekly - skipping. Wrong day.")
             return
         self.run_backup()

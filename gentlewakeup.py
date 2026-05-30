@@ -258,7 +258,7 @@ class GentleWakeup(adplus.Hass):
             self.run_in(self.cb_gw_off, 5, config=config)
 
     def cb_gw_off(self, kwargs):
-        self.lb_log(f"Turning off")
+        self.lb_log("Turning off")
         self.set_state(self.app_entity, state="off")
 
         config = kwargs["config"]

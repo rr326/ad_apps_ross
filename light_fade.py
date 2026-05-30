@@ -168,7 +168,7 @@ class LightFade(adplus.Hass):
             return
 
         if (last_step - 1) * step_size > abs(bright_end - bright_start):
-            self.error(f"Seems to be in a infinite loop. exiting.")
+            self.error("Seems to be in a infinite loop. exiting.")
             return
 
         new_brightness = current_brightness_val + step_size * (1 if increase else -1)
