@@ -7,6 +7,19 @@ import adplus
 
 adplus.importlib.reload(adplus)
 
+# Colour vocabulary: meaning -> colour. Code picks a meaning, never a colour.
+# What each meaning means, plus the dashboard-only rows (Transition, Status,
+# Action): README_shared.md "Dashboard colours" in rr326/haconfig.
+COLOR = {
+    "good": "green",  # on / active, and it should be
+    "idle": "white",  # off, and it should be
+    "notice": "orange",  # not the default, but not wrong
+    "wrong": "red",  # not what the home state calls for; act
+    "no_data": "yellow",  # can't trust the reading right now; expected back
+    "dead": "#b0b0b0",  # out of service; won't recover on its own
+    "bug": "purple",  # state the code didn't anticipate
+}
+
 
 class DashboardSupport(adplus.Hass):
     """
@@ -162,35 +175,35 @@ class DashboardSupport(adplus.Hass):
 
         if home_mode in ["Home", "Arriving"]:
             if check("is_offline"):
-                color = "yellow"
+                color = COLOR["no_data"]
             elif check("is_hardoff") and climate == "climate.cabin":
-                color = "orange"
+                color = COLOR["notice"]
             elif check("is_on"):
                 if climate in ["climate.gym", "climate.tv_room"]:
-                    color = "red"
+                    color = COLOR["notice"]  # expensive room heating
                 else:
-                    color = "green"
+                    color = COLOR["good"]
             elif check("is_off"):
-                color = "white"
+                color = COLOR["idle"]
             else:
                 self.warn(
                     f"Unexpected autoclimate state for climate: {climate}. State: {state}"
                 )
-                color = "purple"
+                color = COLOR["bug"]
         elif home_mode in ["Away", "Leaving"]:
             if check("is_offline"):
-                color = "yellow"
+                color = COLOR["no_data"]
             elif check("is_hardoff") and climate == "climate.cabin":
-                color = "orange"
+                color = COLOR["notice"]
             elif check("is_on"):
-                color = "red"
+                color = COLOR["wrong"]
             elif check("is_off"):
-                color = "white"
+                color = COLOR["idle"]
             else:
                 self.warn(
                     f"Unexpected state for climate: {climate}. State: {state}"
                 )
-                color = "purple"
+                color = COLOR["bug"]
 
         self.colors_dict[climate] = color
 
@@ -200,23 +213,23 @@ class DashboardSupport(adplus.Hass):
         overall = self.get_state("app.autoclimate_state")
         overall_color = None
         if overall == "offline":
-            overall_color = "yellow"
+            overall_color = COLOR["no_data"]
         elif home_mode in ["Home", "Arriving"]:
             if overall == "on":
-                overall_color = "green"
+                overall_color = COLOR["good"]
             elif overall == "off":
-                overall_color = "white"
+                overall_color = COLOR["idle"]
             else:
-                overall_color = "purple"
+                overall_color = COLOR["bug"]
         elif home_mode in ["Away", "Leaving"]:
             if overall == "on":
-                overall_color = "red"
+                overall_color = COLOR["wrong"]
             elif overall == "off":
-                overall_color = "white"
+                overall_color = COLOR["idle"]
             else:
-                overall_color = "purple"
+                overall_color = COLOR["bug"]
         else:
-            overall_color = "purple"
+            overall_color = COLOR["bug"]
 
         # Flatten
         data = {climate: self.colors_dict[climate] for climate in self.climates}
@@ -229,34 +242,34 @@ class DashboardSupport(adplus.Hass):
             return
 
         # Initialize
-        water_shutoff_color = "purple"
-        water_system_mode_color = "purple"
+        water_shutoff_color = COLOR["bug"]
+        water_system_mode_color = COLOR["bug"]
 
         home_mode = self.get_state(self.home_state_entity)
         water_shutoff_state = str(self.get_state(self.water_shutoff_valve)).lower()
         water_system_mode = str(self.get_state(self.water_system_mode)).lower()
         if home_mode in ["Arriving", "Away"]:
             if water_shutoff_state == "off":
-                water_shutoff_color = "white"
+                water_shutoff_color = COLOR["idle"]
             else:
-                water_shutoff_color = "red"
+                water_shutoff_color = COLOR["wrong"]
 
             if water_system_mode == "away":
-                water_system_mode_color = "white"
+                water_system_mode_color = COLOR["idle"]
             else:
                 water_system_mode_color = (
-                    "white"  # Not doing vacation mode anymore. Does not work reliably.
+                    COLOR["idle"]  # Not doing vacation mode anymore. Does not work reliably.
                 )
         elif home_mode in ["Leaving", "Home"]:
             if water_shutoff_state == "on":
-                water_shutoff_color = "green"
+                water_shutoff_color = COLOR["good"]
             else:
-                water_shutoff_color = "red"
+                water_shutoff_color = COLOR["wrong"]
 
             if water_system_mode == "home":
-                water_system_mode_color = "green"
+                water_system_mode_color = COLOR["good"]
             else:
-                water_system_mode_color = "red"
+                water_system_mode_color = COLOR["wrong"]
 
         self.set_app_state(
             {
@@ -270,21 +283,21 @@ class DashboardSupport(adplus.Hass):
             return
 
         # Initialize
-        rinnai_away_color = "purple"
-        rinnai_temp_color = "purple"
+        rinnai_away_color = COLOR["bug"]
+        rinnai_temp_color = COLOR["bug"]
 
         home_mode = self.get_state(self.home_state_entity)
         rinnai_away_state = self.get_state(self.rinnai, attribute="away_mode")
         raw_temp = self.get_state(self.rinnai, attribute="temperature")
 
         # During the Rinnai integration's hourly OAuth-token refresh, attributes
-        # briefly come back as None. Treat that the same as stale data (orange)
+        # briefly come back as None. Treat that the same as stale data (no_data)
         # and bail; the next state change after reload will recolor correctly.
         if rinnai_away_state is None or raw_temp is None:
             self.set_app_state(
                 {
-                    "haven_rinnai_away_mode": "orange",
-                    "haven_rinnai_set_temperature": "orange",
+                    "haven_rinnai_away_mode": COLOR["no_data"],
+                    "haven_rinnai_set_temperature": COLOR["no_data"],
                 }
             )
             return
@@ -305,28 +318,28 @@ class DashboardSupport(adplus.Hass):
             )
 
         if is_old_data:
-            rinnai_away_color = "orange"
-            rinnai_temp_color = "orange"
+            rinnai_away_color = COLOR["no_data"]
+            rinnai_temp_color = COLOR["no_data"]
         elif home_mode in ["Arriving", "Leaving", "Away"]:
             if rinnai_away_state == "on":
-                rinnai_away_color = "white"
+                rinnai_away_color = COLOR["idle"]
             else:
-                rinnai_away_color = "red"
+                rinnai_away_color = COLOR["wrong"]
 
             if rinnai_temp == 125:
-                rinnai_temp_color = "white"
+                rinnai_temp_color = COLOR["idle"]
             else:
-                rinnai_temp_color = "yellow"
+                rinnai_temp_color = COLOR["notice"]
         elif home_mode in ["Home"]:
             if rinnai_away_state == "off":
-                rinnai_away_color = "green"
+                rinnai_away_color = COLOR["good"]
             else:
-                rinnai_away_color = "red"
+                rinnai_away_color = COLOR["wrong"]
 
             if rinnai_temp == 125:
-                rinnai_temp_color = "green"
+                rinnai_temp_color = COLOR["good"]
             else:
-                rinnai_temp_color = "red"
+                rinnai_temp_color = COLOR["wrong"]
 
         self.set_app_state(
             {
