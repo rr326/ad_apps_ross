@@ -62,12 +62,6 @@ class DashboardSupport(adplus.Hass):
         self.app_color_entity = f"app.{self.appname}"
         self.climates = self.argsn["climate"]["entities"]
         self.app_state_entity = self.argsn["app_state"]
-        self.configured_climates = [
-            "climate.cabin",
-            "climate.master_bath",
-            "climate.gym",
-            "climate.tv_room",
-        ]
         self.home_state_entity = self.argsn["home_state_entity"]
         self.water_shutoff_valve = "switch.haven_flo_shutoff_valve"
         self.water_system_mode = "sensor.haven_flo_current_system_mode"
@@ -77,10 +71,15 @@ class DashboardSupport(adplus.Hass):
             climate: None for climate in self.climates
         }
 
-        # Guard against programming / config errors
-        if set(self.climates) != set(self.configured_climates):
+        # Guard against config drift: this app's climate list must match the
+        # zones AutoClimate manages (AutoClimate is a declared dependency).
+        autoclimate = self.get_app("AutoClimate")
+        autoclimate_climates = (
+            list(autoclimate.args.get("entity_rules", {})) if autoclimate else []
+        )
+        if set(self.climates) != set(autoclimate_climates):
             self.warn(
-                f"climate_dashboard is not displaying all entities. autoclimate_entities: {self.climates} -- climate_dashboard_entities: {self.configured_climates}"
+                f"climate list differs from AutoClimate's entity_rules. dashboard_support: {self.climates} -- autoclimate: {autoclimate_climates}"
             )
 
         self.run_in(
